@@ -1,0 +1,32 @@
+{
+  "name": "ledmatrix",
+  "version": "1.0.0",
+  "description": "LED Matrix Controller - HTMX + Hono + Node.js",
+  "main": "dist/server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "start:sudo": "sudo $(which node) dist/server.js"
+  },
+  "keywords": [
+    "led-matrix",
+    "raspberry-pi",
+    "hub75",
+    "htmx",
+    "hono"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "hono": "^3.12.0",
+    "rpi-led-matrix": "^1.15.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}
