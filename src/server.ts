@@ -1,14 +1,29 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { MatrixController } from './matrix/MatrixController.js';
 import { createApiRoutes } from './routes/api.js';
 import { createPageRoutes } from './routes/pages.js';
 import * as dotenv from 'dotenv';
+import * as os from 'os';
 
 dotenv.config();
 
 const app = new Hono();
+
+// Use mock controller for development on non-Pi systems
+const isRaspberryPi = os.platform() === 'linux' && os.arch() === 'arm64';
+const isDevelopment = process.env.NODE_ENV === 'development' || !isRaspberryPi;
+
+let MatrixController;
+if (isDevelopment) {
+  console.log('🔧 Development Mode: Using Mock Matrix Controller');
+  const MockModule = await import('./matrix/MockMatrixController.js');
+  MatrixController = MockModule.MatrixController;
+} else {
+  console.log('🎨 Production Mode: Using Real Matrix Controller');
+  const RealModule = await import('./matrix/MatrixController.js');
+  MatrixController = RealModule.MatrixController;
+}
 
 // Initialize LED Matrix Controller
 const matrixController = new MatrixController();
