@@ -25,8 +25,8 @@ export function getMatrixConfig(): MatrixConfig {
     parallel: 1,
     pwmDitherBits: 0,
     limitRefreshRateHz: 0,
-    multiplexing: MuxType.Direct,
-    rowAddressType: RowAddressType.Direct,
+    multiplexing: 0,  // MuxType.Direct
+    rowAddressType: 0,  // RowAddressType.Direct
   };
 
   const runtimeOptions: RuntimeOptions = {
