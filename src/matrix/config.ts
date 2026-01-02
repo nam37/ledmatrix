@@ -1,4 +1,4 @@
-import { MatrixOptions, RuntimeOptions, GpioMapping, RuntimeFlag } from 'rpi-led-matrix';
+import { MatrixOptions, RuntimeOptions, GpioMapping, RuntimeFlag, MuxType, RowAddressType } from 'rpi-led-matrix';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -22,6 +22,11 @@ export function getMatrixConfig(): MatrixConfig {
     ledRgbSequence: 'RGB',
     panelType: '',
     pixelMapperConfig: '',
+    parallel: 1,
+    pwmDitherBits: 0,
+    limitRefreshRateHz: 0,
+    multiplexing: MuxType.Direct,
+    rowAddressType: RowAddressType.Direct,
   };
 
   const runtimeOptions: RuntimeOptions = {
