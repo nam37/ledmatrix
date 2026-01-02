@@ -28,7 +28,7 @@ export function createApiRoutes(matrixController: MatrixController) {
     const formData = await c.req.parseBody();
     const mode = formData.mode as DisplayMode;
 
-    if (['clock', 'text', 'weather', 'scroll', 'rainbow', 'plasma', 'squares', 'life', 'pulse', 'off'].includes(mode)) {
+    if (['clock', 'text', 'weather', 'scroll', 'rainbow', 'plasma', 'squares', 'life', 'pulse', 'image', 'off'].includes(mode)) {
       matrixController.setMode(mode);
       return c.html(modeButtons(mode));
     }

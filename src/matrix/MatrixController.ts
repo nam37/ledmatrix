@@ -2,13 +2,16 @@ import { LedMatrix, Font } from 'rpi-led-matrix';
 import { getMatrixConfig } from './config.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import sharp from 'sharp';
+import { readFile } from 'fs/promises';
 
-export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'off';
+export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'image' | 'off';
 
 export interface DisplayState {
   mode: DisplayMode;
   text?: string;
   brightness?: number;
+  imagePath?: string;
 }
 
 export class MatrixController {
@@ -21,6 +24,7 @@ export class MatrixController {
   private lifeGrid: boolean[][] = [];
   private lifeAge: number[][] = [];  // Track age of each cell
   private pulseValue: number = 0;
+  private imageBuffer: Buffer | null = null;
 
   constructor() {
     const config = getMatrixConfig();
@@ -42,6 +46,12 @@ export class MatrixController {
       size: `${config.matrixOptions.rows}x${config.matrixOptions.cols * (config.matrixOptions.chainLength || 1)}`,
       mapping: config.matrixOptions.hardwareMapping,
       font: this.font.name(),
+    });
+
+    // Load default image
+    const defaultImagePath = join(__dirname, '../../public/default-image-cropped.png');
+    this.setImage(defaultImagePath).catch(err => {
+      console.error('Failed to load default image:', err);
     });
   }
 
@@ -93,6 +103,9 @@ export class MatrixController {
         break;
       case 'pulse':
         this.drawPulsingColor();
+        break;
+      case 'image':
+        this.drawImage();
         break;
       case 'off':
         // Keep clear
@@ -357,6 +370,15 @@ export class MatrixController {
     return ((Math.floor(r * 255) << 16) | (Math.floor(g * 255) << 8) | Math.floor(b * 255));
   }
 
+  private drawImage(): void {
+    if (!this.imageBuffer) return;
+
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+    this.matrix.brightness(this.state.brightness || 80);
+    this.matrix.drawBuffer(this.imageBuffer, width, height);
+  }
+
   // Public API
   setMode(mode: DisplayMode): void {
     this.state.mode = mode;
@@ -374,6 +396,25 @@ export class MatrixController {
 
   getState(): DisplayState {
     return { ...this.state };
+  }
+
+  async setImage(imagePath: string): Promise<void> {
+    try {
+      const width = this.matrix.width();
+      const height = this.matrix.height();
+
+      // Load and process image to fit matrix dimensions
+      const imageData = await sharp(imagePath)
+        .resize(width, height, { fit: 'contain', background: { r: 0, g: 0, b: 0 } })
+        .raw()
+        .toBuffer();
+
+      this.imageBuffer = imageData;
+      this.state.imagePath = imagePath;
+      console.log(`Image loaded: ${imagePath}`);
+    } catch (error) {
+      console.error('Failed to load image:', error);
+    }
   }
 
   shutdown(): void {

@@ -95,6 +95,16 @@ export const modeButtons = (currentMode: string) => html`
   <div>
     <button
       hx-post="/api/mode"
+      hx-vals='{"mode": "image"}'
+      hx-target="#mode-buttons"
+      hx-swap="innerHTML"
+      class="uk-button uk-button-default uk-width-1-1 ${currentMode === 'image' ? 'uk-button-primary' : ''}">
+      <span uk-icon="icon: image"></span> Image
+    </button>
+  </div>
+  <div>
+    <button
+      hx-post="/api/mode"
       hx-vals='{"mode": "off"}'
       hx-target="#mode-buttons"
       hx-swap="innerHTML"
