@@ -17,12 +17,10 @@ export function getMatrixConfig(): MatrixConfig {
     hardwareMapping: (process.env.MATRIX_GPIO_MAPPING || 'adafruit-hat') as GpioMapping,
     brightness: parseInt(process.env.MATRIX_BRIGHTNESS || '80'),
     pwmBits: parseInt(process.env.MATRIX_PWM_BITS || '11'),
-    disableHardwarePulsing: false,
   };
 
   const runtimeOptions: RuntimeOptions = {
     gpioSlowdown: parseInt(process.env.MATRIX_GPIO_SLOWDOWN || '4'),
-    dropPrivileges: false, // Keep root privileges for GPIO access
   };
 
   return {
