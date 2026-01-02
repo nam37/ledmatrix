@@ -1,4 +1,4 @@
-import { MatrixOptions, RuntimeOptions, GpioMapping } from 'rpi-led-matrix';
+import { MatrixOptions, RuntimeOptions, GpioMapping, RuntimeFlag } from 'rpi-led-matrix';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -22,6 +22,9 @@ export function getMatrixConfig(): MatrixConfig {
 
   const runtimeOptions: RuntimeOptions = {
     gpioSlowdown: 4,
+    doGpioInit: true,
+    dropPrivileges: RuntimeFlag.Off,
+    daemon: RuntimeFlag.Off,
   };
 
   return {
