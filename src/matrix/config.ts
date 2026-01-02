@@ -12,7 +12,7 @@ export function getMatrixConfig(): MatrixConfig {
   const matrixOptions: MatrixOptions = {
     rows: 64,
     cols: 64,
-    chainLength: 3,
+    chainLength: 1,  // Set to 1 for single panel, change to 3 when all panels connected
     hardwareMapping: 'adafruit-hat' as GpioMapping,
   };
 
