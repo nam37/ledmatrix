@@ -22,7 +22,6 @@ export function getMatrixConfig(): MatrixConfig {
 
   const runtimeOptions: RuntimeOptions = {
     gpioSlowdown: 4,
-    daemonize: 0,
   };
 
   return {
