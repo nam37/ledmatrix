@@ -13,13 +13,16 @@ export function getMatrixConfig(): MatrixConfig {
     rows: 64,
     cols: 64,
     chainLength: 1,  // Set to 1 for single panel, change to 3 when all panels connected
+    parallel: 1,
     hardwareMapping: 'adafruit-hat' as GpioMapping,
     brightness: 80,
     pwmBits: 11,
+    pwmLsbNanoseconds: 130,
   };
 
   const runtimeOptions: RuntimeOptions = {
     gpioSlowdown: 4,
+    daemonize: 0,
   };
 
   return {
