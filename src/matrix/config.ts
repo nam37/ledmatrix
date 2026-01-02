@@ -17,6 +17,7 @@ export function getMatrixConfig(): MatrixConfig {
     brightness: 80,
     pwmBits: 11,
     pwmLsbNanoseconds: 130,
+    disableHardwarePulsing: false,
   };
 
   const runtimeOptions: RuntimeOptions = {
