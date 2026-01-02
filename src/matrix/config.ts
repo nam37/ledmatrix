@@ -19,6 +19,9 @@ export function getMatrixConfig(): MatrixConfig {
     pwmLsbNanoseconds: 130,
     disableHardwarePulsing: false,
     inverseColors: false,
+    ledRgbSequence: 'RGB',
+    panelType: '',
+    pixelMapperConfig: '',
   };
 
   const runtimeOptions: RuntimeOptions = {
