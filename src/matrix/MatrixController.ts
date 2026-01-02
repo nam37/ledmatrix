@@ -248,9 +248,9 @@ export class MatrixController {
       this.lifeGrid = newGrid;
       this.lifeAge = newAge;
 
-      // Check if population is too low or too high, reset if needed
+      // Reset if population dies out completely or gets stuck
       const population = this.lifeGrid.flat().filter(c => c).length;
-      if (population < 10 || population > width * height * 0.9) {
+      if (population < 5) {
         this.initializeLifeGrid(width, height);
       }
     }
@@ -273,77 +273,11 @@ export class MatrixController {
     this.lifeGrid = Array(height).fill(0).map(() => Array(width).fill(false));
     this.lifeAge = Array(height).fill(0).map(() => Array(width).fill(0));
 
-    // Randomly choose between different initialization strategies
-    const strategy = Math.floor(Math.random() * 3);
-
-    if (strategy === 0) {
-      // Random with higher density
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          this.lifeGrid[y][x] = Math.random() > 0.6; // 40% density
-        }
-      }
-    } else if (strategy === 1) {
-      // Add some gliders
-      for (let i = 0; i < 5; i++) {
-        const x = Math.floor(Math.random() * (width - 5));
-        const y = Math.floor(Math.random() * (height - 5));
-        this.addGlider(x, y);
-      }
-    } else {
-      // Add some pulsars and random noise
-      const cx = Math.floor(width / 2);
-      const cy = Math.floor(height / 2);
-      this.addPulsar(cx, cy);
-      // Add random noise
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          if (Math.random() > 0.85) this.lifeGrid[y][x] = true;
-        }
-      }
-    }
-  }
-
-  private addGlider(x: number, y: number): void {
-    const pattern = [
-      [0, 1, 0],
-      [0, 0, 1],
-      [1, 1, 1]
-    ];
-    for (let dy = 0; dy < 3; dy++) {
-      for (let dx = 0; dx < 3; dx++) {
-        if (pattern[dy][dx] && y + dy < this.lifeGrid.length && x + dx < this.lifeGrid[0].length) {
-          this.lifeGrid[y + dy][x + dx] = true;
-        }
-      }
-    }
-  }
-
-  private addPulsar(cx: number, cy: number): void {
-    const pattern = [
-      [0,0,1,1,1,0,0,0,1,1,1,0,0],
-      [0,0,0,0,0,0,0,0,0,0,0,0,0],
-      [1,0,0,0,0,1,0,1,0,0,0,0,1],
-      [1,0,0,0,0,1,0,1,0,0,0,0,1],
-      [1,0,0,0,0,1,0,1,0,0,0,0,1],
-      [0,0,1,1,1,0,0,0,1,1,1,0,0],
-      [0,0,0,0,0,0,0,0,0,0,0,0,0],
-      [0,0,1,1,1,0,0,0,1,1,1,0,0],
-      [1,0,0,0,0,1,0,1,0,0,0,0,1],
-      [1,0,0,0,0,1,0,1,0,0,0,0,1],
-      [1,0,0,0,0,1,0,1,0,0,0,0,1],
-      [0,0,0,0,0,0,0,0,0,0,0,0,0],
-      [0,0,1,1,1,0,0,0,1,1,1,0,0]
-    ];
-    const startY = cy - 6;
-    const startX = cx - 6;
-    for (let dy = 0; dy < 13; dy++) {
-      for (let dx = 0; dx < 13; dx++) {
-        const y = startY + dy;
-        const x = startX + dx;
-        if (y >= 0 && y < this.lifeGrid.length && x >= 0 && x < this.lifeGrid[0].length) {
-          this.lifeGrid[y][x] = pattern[dy][dx] === 1;
-        }
+    // Pure random chaos - more interesting than patterns
+    const density = 0.35 + Math.random() * 0.15; // 35-50% density
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        this.lifeGrid[y][x] = Math.random() > (1 - density);
       }
     }
   }
