@@ -1,5 +1,7 @@
-import { LedMatrix } from 'rpi-led-matrix';
+import { LedMatrix, Font } from 'rpi-led-matrix';
 import { getMatrixConfig } from './config.js';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'off';
 
@@ -11,16 +13,25 @@ export interface DisplayState {
 
 export class MatrixController {
   private matrix: LedMatrix;
+  private font: any;  // Keep font instance alive
   private state: DisplayState;
   private updateInterval: NodeJS.Timeout | null = null;
   private animationFrame: number = 0;
   private scrollOffset: number = 0;
   private lifeGrid: boolean[][] = [];
+  private lifeAge: number[][] = [];  // Track age of each cell
   private pulseValue: number = 0;
 
   constructor() {
     const config = getMatrixConfig();
     this.matrix = new LedMatrix(config.matrixOptions, config.runtimeOptions);
+
+    // Load default font - keep as class member to prevent premature destruction
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const fontPath = join(__dirname, '../../node_modules/rpi-led-matrix/vendor/fonts/7x13.bdf');
+    this.font = new Font('7x13', fontPath);
+    this.matrix.font(this.font);
 
     this.state = {
       mode: 'clock',
@@ -30,6 +41,7 @@ export class MatrixController {
     console.log('Matrix initialized:', {
       size: `${config.matrixOptions.rows}x${config.matrixOptions.cols * (config.matrixOptions.chainLength || 1)}`,
       mapping: config.matrixOptions.hardwareMapping,
+      font: this.font.name(),
     });
   }
 
@@ -93,7 +105,7 @@ export class MatrixController {
   private drawClock(): void {
     const now = new Date();
     const time = now.toLocaleTimeString('en-US', {
-      hour12: true,
+      hour12: false,  // Use 24-hour format to fit on 64-pixel display
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
@@ -102,7 +114,7 @@ export class MatrixController {
     this.matrix
       .fgColor(0xFFD700) // Gold color
       .brightness(this.state.brightness || 80)
-      .drawText(time, 20, 36);
+      .drawText(time, 4, 36);  // Adjusted x position to fit better
   }
 
   private drawText(text: string): void {
@@ -207,16 +219,15 @@ export class MatrixController {
     const width = this.matrix.width();
     const height = this.matrix.height();
 
-    // Initialize grid on first run
+    // Initialize grid on first run or reset
     if (this.lifeGrid.length === 0) {
-      this.lifeGrid = Array(height).fill(0).map(() =>
-        Array(width).fill(0).map(() => Math.random() > 0.7)
-      );
+      this.initializeLifeGrid(width, height);
     }
 
     // Update every 5 frames
     if (this.animationFrame % 5 === 0) {
       const newGrid = Array(height).fill(0).map(() => Array(width).fill(false));
+      const newAge = Array(height).fill(0).map(() => Array(width).fill(0));
 
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
@@ -226,21 +237,112 @@ export class MatrixController {
           // Conway's rules
           if (alive && (neighbors === 2 || neighbors === 3)) {
             newGrid[y][x] = true;
+            newAge[y][x] = this.lifeAge[y][x] + 1; // Increment age
           } else if (!alive && neighbors === 3) {
             newGrid[y][x] = true;
+            newAge[y][x] = 0; // New cell
           }
         }
       }
 
       this.lifeGrid = newGrid;
+      this.lifeAge = newAge;
+
+      // Check if population is too low or too high, reset if needed
+      const population = this.lifeGrid.flat().filter(c => c).length;
+      if (population < 10 || population > width * height * 0.9) {
+        this.initializeLifeGrid(width, height);
+      }
     }
 
-    // Draw grid
+    // Draw grid with age-based colors
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         if (this.lifeGrid[y][x]) {
-          const color = this.hsvToRgb(0.3, 0.8, this.state.brightness! / 100);
+          // Color based on age: young = blue/cyan, old = red/yellow
+          const age = this.lifeAge[y][x];
+          const hue = (0.6 - Math.min(age * 0.02, 0.5)) % 1; // Blue to red
+          const color = this.hsvToRgb(hue, 0.9, this.state.brightness! / 100);
           this.matrix.fgColor(color).setPixel(x, y);
+        }
+      }
+    }
+  }
+
+  private initializeLifeGrid(width: number, height: number): void {
+    this.lifeGrid = Array(height).fill(0).map(() => Array(width).fill(false));
+    this.lifeAge = Array(height).fill(0).map(() => Array(width).fill(0));
+
+    // Randomly choose between different initialization strategies
+    const strategy = Math.floor(Math.random() * 3);
+
+    if (strategy === 0) {
+      // Random with higher density
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          this.lifeGrid[y][x] = Math.random() > 0.6; // 40% density
+        }
+      }
+    } else if (strategy === 1) {
+      // Add some gliders
+      for (let i = 0; i < 5; i++) {
+        const x = Math.floor(Math.random() * (width - 5));
+        const y = Math.floor(Math.random() * (height - 5));
+        this.addGlider(x, y);
+      }
+    } else {
+      // Add some pulsars and random noise
+      const cx = Math.floor(width / 2);
+      const cy = Math.floor(height / 2);
+      this.addPulsar(cx, cy);
+      // Add random noise
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (Math.random() > 0.85) this.lifeGrid[y][x] = true;
+        }
+      }
+    }
+  }
+
+  private addGlider(x: number, y: number): void {
+    const pattern = [
+      [0, 1, 0],
+      [0, 0, 1],
+      [1, 1, 1]
+    ];
+    for (let dy = 0; dy < 3; dy++) {
+      for (let dx = 0; dx < 3; dx++) {
+        if (pattern[dy][dx] && y + dy < this.lifeGrid.length && x + dx < this.lifeGrid[0].length) {
+          this.lifeGrid[y + dy][x + dx] = true;
+        }
+      }
+    }
+  }
+
+  private addPulsar(cx: number, cy: number): void {
+    const pattern = [
+      [0,0,1,1,1,0,0,0,1,1,1,0,0],
+      [0,0,0,0,0,0,0,0,0,0,0,0,0],
+      [1,0,0,0,0,1,0,1,0,0,0,0,1],
+      [1,0,0,0,0,1,0,1,0,0,0,0,1],
+      [1,0,0,0,0,1,0,1,0,0,0,0,1],
+      [0,0,1,1,1,0,0,0,1,1,1,0,0],
+      [0,0,0,0,0,0,0,0,0,0,0,0,0],
+      [0,0,1,1,1,0,0,0,1,1,1,0,0],
+      [1,0,0,0,0,1,0,1,0,0,0,0,1],
+      [1,0,0,0,0,1,0,1,0,0,0,0,1],
+      [1,0,0,0,0,1,0,1,0,0,0,0,1],
+      [0,0,0,0,0,0,0,0,0,0,0,0,0],
+      [0,0,1,1,1,0,0,0,1,1,1,0,0]
+    ];
+    const startY = cy - 6;
+    const startX = cx - 6;
+    for (let dy = 0; dy < 13; dy++) {
+      for (let dx = 0; dx < 13; dx++) {
+        const y = startY + dy;
+        const x = startX + dx;
+        if (y >= 0 && y < this.lifeGrid.length && x >= 0 && x < this.lifeGrid[0].length) {
+          this.lifeGrid[y][x] = pattern[dy][dx] === 1;
         }
       }
     }
