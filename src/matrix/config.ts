@@ -14,6 +14,8 @@ export function getMatrixConfig(): MatrixConfig {
     cols: 64,
     chainLength: 1,  // Set to 1 for single panel, change to 3 when all panels connected
     hardwareMapping: 'adafruit-hat' as GpioMapping,
+    brightness: 80,
+    pwmBits: 11,
   };
 
   const runtimeOptions: RuntimeOptions = {
