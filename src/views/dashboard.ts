@@ -105,6 +105,16 @@ export const modeButtons = (currentMode: string) => html`
   <div>
     <button
       hx-post="/api/mode"
+      hx-vals='{"mode": "maze"}'
+      hx-target="#mode-buttons"
+      hx-swap="innerHTML"
+      class="uk-button uk-button-default uk-width-1-1 ${currentMode === 'maze' ? 'uk-button-primary' : ''}">
+      <span uk-icon="icon: git-branch"></span> Maze
+    </button>
+  </div>
+  <div>
+    <button
+      hx-post="/api/mode"
       hx-vals='{"mode": "off"}'
       hx-target="#mode-buttons"
       hx-swap="innerHTML"

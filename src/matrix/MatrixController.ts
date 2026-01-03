@@ -5,7 +5,7 @@ import { dirname, join } from 'path';
 import sharp from 'sharp';
 import { readFile } from 'fs/promises';
 
-export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'image' | 'off';
+export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'image' | 'maze' | 'off';
 
 export interface DisplayState {
   mode: DisplayMode;
@@ -29,6 +29,13 @@ export class MatrixController {
   private clockY: number = 36;
   private clockDx: number = 1;  // Clock velocity
   private clockDy: number = 1;
+  private mazeGrid: number[][] = [];  // 0=wall, 1=path
+  private mazePath: Array<{x: number, y: number}> = [];  // Current solver path
+  private mazeState: 'generating' | 'solving' | 'solved' | 'paused' = 'generating';
+  private mazeTimer: number = 0;  // Frame counter for state transitions
+  private mazeCellSize: number = 2;  // Pixels per maze cell
+  private mazeStack: Array<{x: number, y: number}> = [];  // DFS stack for solving
+  private mazeVisited: boolean[][] = [];  // Track visited cells during solving
 
   constructor() {
     const config = getMatrixConfig();
@@ -117,6 +124,9 @@ export class MatrixController {
         break;
       case 'image':
         this.drawImage();
+        break;
+      case 'maze':
+        this.drawMaze();
         break;
       case 'off':
         // Keep clear
@@ -346,6 +356,122 @@ export class MatrixController {
     return count;
   }
 
+  private initializeMaze(): void {
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+    const cols = Math.floor(width / this.mazeCellSize);
+    const rows = Math.floor(height / this.mazeCellSize);
+
+    // Initialize grid with all walls
+    this.mazeGrid = Array(rows).fill(0).map(() => Array(cols).fill(0));
+
+    // Generate maze using recursive backtracking
+    const stack: Array<{x: number, y: number}> = [];
+    const startX = 0;
+    const startY = 0;
+
+    this.mazeGrid[startY][startX] = 1; // Mark as path
+    stack.push({x: startX, y: startY});
+
+    while (stack.length > 0) {
+      const current = stack[stack.length - 1];
+      const neighbors = this.getUnvisitedNeighbors(current.x, current.y, cols, rows);
+
+      if (neighbors.length > 0) {
+        // Pick random neighbor
+        const next = neighbors[Math.floor(Math.random() * neighbors.length)];
+
+        // Remove wall between current and next
+        const wallX = current.x + Math.floor((next.x - current.x) / 2);
+        const wallY = current.y + Math.floor((next.y - current.y) / 2);
+        this.mazeGrid[wallY][wallX] = 1;
+        this.mazeGrid[next.y][next.x] = 1;
+
+        stack.push(next);
+      } else {
+        stack.pop();
+      }
+    }
+
+    // Initialize solver state
+    this.mazePath = [{x: 0, y: 0}];
+    this.mazeStack = [{x: 0, y: 0}];
+    this.mazeVisited = Array(rows).fill(0).map(() => Array(cols).fill(false));
+    this.mazeVisited[0][0] = true;
+    this.mazeState = 'solving';
+    this.mazeTimer = 0;
+  }
+
+  private getUnvisitedNeighbors(x: number, y: number, cols: number, rows: number): Array<{x: number, y: number}> {
+    const neighbors = [];
+    const directions = [
+      {dx: 0, dy: -2}, // Up
+      {dx: 2, dy: 0},  // Right
+      {dx: 0, dy: 2},  // Down
+      {dx: -2, dy: 0}  // Left
+    ];
+
+    for (const dir of directions) {
+      const nx = x + dir.dx;
+      const ny = y + dir.dy;
+
+      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && this.mazeGrid[ny][nx] === 0) {
+        neighbors.push({x: nx, y: ny});
+      }
+    }
+
+    return neighbors;
+  }
+
+  private solveMazeStep(): boolean {
+    if (this.mazeStack.length === 0) return true; // No solution (shouldn't happen)
+
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+    const cols = Math.floor(width / this.mazeCellSize);
+    const rows = Math.floor(height / this.mazeCellSize);
+
+    const current = this.mazeStack[this.mazeStack.length - 1];
+
+    // Check if we reached the goal (bottom-right corner)
+    if (current.x === cols - 1 && current.y === rows - 1) {
+      return true; // Solved!
+    }
+
+    // Get valid neighbors (paths we can move to)
+    const neighbors = [];
+    const directions = [
+      {dx: 0, dy: -1}, // Up
+      {dx: 1, dy: 0},  // Right
+      {dx: 0, dy: 1},  // Down
+      {dx: -1, dy: 0}  // Left
+    ];
+
+    for (const dir of directions) {
+      const nx = current.x + dir.dx;
+      const ny = current.y + dir.dy;
+
+      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows &&
+          this.mazeGrid[ny][nx] === 1 && !this.mazeVisited[ny][nx]) {
+        neighbors.push({x: nx, y: ny});
+      }
+    }
+
+    if (neighbors.length > 0) {
+      // Pick first unvisited neighbor (DFS)
+      const next = neighbors[0];
+      this.mazeVisited[next.y][next.x] = true;
+      this.mazeStack.push(next);
+      this.mazePath.push(next);
+    } else {
+      // Backtrack - no unvisited neighbors
+      this.mazeStack.pop();
+      this.mazePath.pop();
+    }
+
+    return false; // Not solved yet
+  }
+
   private drawPulsingColor(): void {
     const width = this.matrix.width();
     const height = this.matrix.height();
@@ -359,6 +485,94 @@ export class MatrixController {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         this.matrix.fgColor(color).setPixel(x, y);
+      }
+    }
+  }
+
+  private drawMaze(): void {
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+    const cols = Math.floor(width / this.mazeCellSize);
+    const rows = Math.floor(height / this.mazeCellSize);
+
+    // Initialize maze if needed
+    if (this.mazeGrid.length === 0 || this.mazeState === 'generating') {
+      this.initializeMaze();
+    }
+
+    // Handle solving state
+    if (this.mazeState === 'solving') {
+      // Update every 2 frames for visible animation
+      if (this.animationFrame % 2 === 0) {
+        const solved = this.solveMazeStep();
+        if (solved) {
+          this.mazeState = 'solved';
+          this.mazeTimer = 0;
+        }
+      }
+    } else if (this.mazeState === 'solved') {
+      // Display solved maze for 2 seconds
+      this.mazeTimer++;
+      if (this.mazeTimer > 20) { // ~2 seconds at 10fps
+        this.mazeState = 'paused';
+        this.mazeTimer = 0;
+      }
+    } else if (this.mazeState === 'paused') {
+      // Brief pause before generating new maze
+      this.mazeTimer++;
+      if (this.mazeTimer > 5) { // ~0.5 seconds
+        this.mazeState = 'generating';
+      }
+    }
+
+    // Render maze
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const cellX = col * this.mazeCellSize;
+        const cellY = row * this.mazeCellSize;
+
+        // Determine cell color
+        let color;
+        if (this.mazeGrid[row][col] === 0) {
+          // Wall - dark gray
+          color = 0x202020;
+        } else {
+          // Path - light gray
+          color = 0x404040;
+        }
+
+        // Draw cell
+        for (let py = 0; py < this.mazeCellSize; py++) {
+          for (let px = 0; px < this.mazeCellSize; px++) {
+            const screenX = cellX + px;
+            const screenY = cellY + py;
+            if (screenX < width && screenY < height) {
+              this.matrix.fgColor(color).setPixel(screenX, screenY);
+            }
+          }
+        }
+      }
+    }
+
+    // Draw solving path with color based on path length
+    for (let i = 0; i < this.mazePath.length; i++) {
+      const cell = this.mazePath[i];
+      const cellX = cell.x * this.mazeCellSize;
+      const cellY = cell.y * this.mazeCellSize;
+
+      // Color based on position in path
+      const hue = (i * 0.05) % 1;
+      const color = this.hsvToRgb(hue, 0.9, this.state.brightness! / 100);
+
+      // Draw path cell
+      for (let py = 0; py < this.mazeCellSize; py++) {
+        for (let px = 0; px < this.mazeCellSize; px++) {
+          const screenX = cellX + px;
+          const screenY = cellY + py;
+          if (screenX < width && screenY < height) {
+            this.matrix.fgColor(color).setPixel(screenX, screenY);
+          }
+        }
       }
     }
   }
