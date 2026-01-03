@@ -25,6 +25,10 @@ export class MatrixController {
   private lifeAge: number[][] = [];  // Track age of each cell
   private pulseValue: number = 0;
   private imageBuffer: Buffer | null = null;
+  private clockX: number = 20;  // Clock position
+  private clockY: number = 36;
+  private clockDx: number = 1;  // Clock velocity
+  private clockDy: number = 1;
 
   constructor() {
     const config = getMatrixConfig();
@@ -41,6 +45,13 @@ export class MatrixController {
       mode: 'clock',
       brightness: 80,
     };
+
+    // Debug font metrics
+    console.log('Font metrics:', {
+      name: this.font.name(),
+      height: this.font.height(),
+      baseline: this.font.baseline(),
+    });
 
     console.log('Matrix initialized:', {
       size: `${config.matrixOptions.rows}x${config.matrixOptions.cols * (config.matrixOptions.chainLength || 1)}`,
@@ -124,10 +135,33 @@ export class MatrixController {
       second: '2-digit'
     });
 
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+    const textWidth = this.font.stringWidth(time);
+
+    // Update position every frame for smooth movement
+    this.clockX += this.clockDx;
+    this.clockY += this.clockDy;
+
+    // Bounce off edges
+    // Y coordinate is the TOP of the text (with 2px adjustment for font padding)
+    const fontHeight = this.font.height();
+    const minY = -2;  // Top of text at top of display
+    const maxY = height - fontHeight + 2;  // Bottom of text at bottom of display
+
+    if (this.clockX <= 0 || this.clockX + textWidth >= width) {
+      this.clockDx = -this.clockDx;
+      this.clockX = Math.max(0, Math.min(this.clockX, width - textWidth));
+    }
+    if (this.clockY <= minY || this.clockY >= maxY) {
+      this.clockDy = -this.clockDy;
+      this.clockY = Math.max(minY, Math.min(this.clockY, maxY));
+    }
+
     this.matrix
       .fgColor(0xFFD700) // Gold color
       .brightness(this.state.brightness || 80)
-      .drawText(time, 4, 36);  // Adjusted x position to fit better
+      .drawText(time, Math.floor(this.clockX), Math.floor(this.clockY));
   }
 
   private drawText(text: string): void {
