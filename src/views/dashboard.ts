@@ -218,5 +218,19 @@ export const dashboard = (state: DisplayState) => html`
       </div>
     </div>
 
+    <!-- Image Management Card -->
+    <div>
+      <div class="uk-card uk-card-default uk-card-body uk-card-hover">
+        <h3 class="uk-card-title">
+          <span uk-icon="icon: image; ratio: 1.2" class="uk-margin-small-right"></span>
+          Image Management
+        </h3>
+        <p class="uk-text-muted">Upload and manage images to display on the LED matrix.</p>
+        <a href="/images" class="uk-button uk-button-primary uk-width-1-1">
+          <span uk-icon="icon: folder"></span> Manage Images
+        </a>
+      </div>
+    </div>
+
   </div>
 `;

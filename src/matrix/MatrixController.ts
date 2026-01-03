@@ -646,6 +646,10 @@ export class MatrixController {
     return { ...this.state };
   }
 
+  getCurrentImagePath(): string | undefined {
+    return this.state.imagePath;
+  }
+
   async setImage(imagePath: string): Promise<void> {
     try {
       const width = this.matrix.width();
