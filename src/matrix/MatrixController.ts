@@ -3,7 +3,7 @@ import { getMatrixConfig } from './config.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import sharp from 'sharp';
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 
 export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'image' | 'maze' | 'off';
 
@@ -15,7 +15,7 @@ export interface DisplayState {
 }
 
 export class MatrixController {
-  private matrix: LedMatrix;
+  private matrix: any;
   private font: any;  // Keep font instance alive
   private state: DisplayState;
   private updateInterval: NodeJS.Timeout | null = null;
@@ -36,6 +36,28 @@ export class MatrixController {
   private mazeCellSize: number = 2;  // Pixels per maze cell
   private mazeStack: Array<{x: number, y: number}> = [];  // DFS stack for solving
   private mazeVisited: boolean[][] = [];  // Track visited cells during solving
+  private weatherData: {
+    current?: {
+      temp: number;
+      condition: string;
+      icon: string;
+      humidity: number;
+      location: string;
+    };
+    forecast?: Array<{
+      date: string;
+      high: number;
+      low: number;
+      condition: string;
+      icon: string;
+    }>;
+    lastFetch?: number;
+  } = {};
+  private weatherConfig: {
+    zipcode?: string;
+  } = {};
+  private weatherCycleIndex: number = 0;
+  private weatherCycleTimer: number = 0;
 
   constructor() {
     const config = getMatrixConfig();
@@ -71,6 +93,19 @@ export class MatrixController {
     this.setImage(defaultImagePath).catch(err => {
       console.error('Failed to load default image:', err);
     });
+
+    // Load weather config
+    const weatherConfigPath = join(__dirname, '../../config/weather.json');
+    readFile(weatherConfigPath, 'utf-8')
+      .then(data => {
+        this.weatherConfig = JSON.parse(data);
+        if (this.weatherConfig.zipcode) {
+          console.log('Weather config loaded:', this.weatherConfig.zipcode);
+        }
+      })
+      .catch(() => {
+        console.log('No weather config found, using defaults');
+      });
   }
 
   start(): void {
@@ -181,12 +216,178 @@ export class MatrixController {
       .drawText(text, 10, 36);
   }
 
+  private async fetchWeatherData(): Promise<void> {
+    const apiKey = process.env.OPENWEATHER_API_KEY;
+
+    if (!apiKey || !this.weatherConfig.zipcode) {
+      return;
+    }
+
+    try {
+      // Fetch current weather
+      const currentUrl = `https://api.openweathermap.org/data/2.5/weather?zip=${this.weatherConfig.zipcode},US&appid=${apiKey}&units=imperial`;
+      const currentResponse = await fetch(currentUrl);
+
+      if (!currentResponse.ok) {
+        console.error('Weather API error:', currentResponse.status);
+        return;
+      }
+
+      const currentData = await currentResponse.json() as any;
+
+      // Fetch 5-day forecast
+      const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?zip=${this.weatherConfig.zipcode},US&appid=${apiKey}&units=imperial`;
+      const forecastResponse = await fetch(forecastUrl);
+
+      if (!forecastResponse.ok) {
+        console.error('Forecast API error:', forecastResponse.status);
+        return;
+      }
+
+      const forecastData = await forecastResponse.json() as any;
+
+      // Parse and store data
+      this.weatherData.current = {
+        temp: Math.round(currentData.main.temp),
+        condition: currentData.weather[0].main,
+        icon: this.mapWeatherIcon(currentData.weather[0].icon),
+        humidity: currentData.main.humidity,
+        location: currentData.name
+      };
+
+      // Process forecast data (group by day, take noon forecast)
+      this.weatherData.forecast = this.processForecastData(forecastData.list);
+      this.weatherData.lastFetch = Date.now();
+
+      console.log('Weather data updated:', this.weatherData.current?.location);
+    } catch (error) {
+      console.error('Failed to fetch weather:', error);
+    }
+  }
+
+  private processForecastData(list: any[]): Array<{date: string, high: number, low: number, condition: string, icon: string}> {
+    const days: Map<string, any[]> = new Map();
+
+    // Group forecasts by day
+    list.forEach(item => {
+      const date = new Date(item.dt * 1000);
+      const dayKey = date.toLocaleDateString();
+
+      if (!days.has(dayKey)) {
+        days.set(dayKey, []);
+      }
+      days.get(dayKey)!.push(item);
+    });
+
+    // Get first 5 days and calculate high/low
+    const forecast = [];
+    let count = 0;
+
+    for (const [dayKey, items] of days) {
+      if (count >= 5) break;
+      if (count === 0) { // Skip today
+        count++;
+        continue;
+      }
+
+      const temps = items.map(i => i.main.temp);
+      const high = Math.round(Math.max(...temps));
+      const low = Math.round(Math.min(...temps));
+
+      // Use noon forecast for conditions
+      const noonForecast = items.find(i => {
+        const hour = new Date(i.dt * 1000).getHours();
+        return hour >= 11 && hour <= 13;
+      }) || items[0];
+
+      const date = new Date(noonForecast.dt * 1000);
+      const dayName = count === 1 ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'short' });
+
+      forecast.push({
+        date: dayName,
+        high,
+        low,
+        condition: noonForecast.weather[0].main,
+        icon: this.mapWeatherIcon(noonForecast.weather[0].icon)
+      });
+
+      count++;
+    }
+
+    return forecast;
+  }
+
+  private mapWeatherIcon(iconCode: string): string {
+    // Map OpenWeatherMap icon codes to our icon types
+    const code = iconCode.substring(0, 2);
+
+    switch (code) {
+      case '01': return 'sunny';
+      case '02': return 'partly-cloudy';
+      case '03':
+      case '04': return 'cloudy';
+      case '09':
+      case '10': return 'rainy';
+      case '11': return 'thunderstorm';
+      case '13': return 'snowy';
+      default: return 'cloudy';
+    }
+  }
+
   private drawWeather(): void {
-    // Placeholder for weather display
-    this.matrix
-      .fgColor(0x00AAFF) // Blue color
-      .brightness(this.state.brightness || 80)
-      .drawText('WEATHER', 30, 36);
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+
+    // Check if we need to fetch weather data
+    const now = Date.now();
+    const shouldFetch = !this.weatherData.lastFetch || (now - this.weatherData.lastFetch) > 600000; // 10 minutes
+
+    if (shouldFetch) {
+      this.fetchWeatherData(); // Async, will update next frame
+    }
+
+    // Show configuration message if not set up
+    if (!process.env.OPENWEATHER_API_KEY) {
+      this.matrix
+        .fgColor(0xFFFFFF)
+        .brightness(this.state.brightness || 80)
+        .drawText('Set API Key', 10, 20)
+        .drawText('in .env file', 10, 40);
+      return;
+    }
+
+    if (!this.weatherConfig.zipcode) {
+      this.matrix
+        .fgColor(0xFFFFFF)
+        .brightness(this.state.brightness || 80)
+        .drawText('Configure', 15, 20)
+        .drawText('Location', 20, 40);
+      return;
+    }
+
+    if (!this.weatherData.current) {
+      this.matrix
+        .fgColor(0xFFFFFF)
+        .brightness(this.state.brightness || 80)
+        .drawText('Loading...', 20, 32);
+      return;
+    }
+
+    // Update cycle timer
+    this.weatherCycleTimer++;
+    if (this.weatherCycleTimer >= 100) { // 10 seconds at 10fps
+      this.weatherCycleTimer = 0;
+      // Calculate total screens based on actual forecast data
+      const totalScreens = 1 + (this.weatherData.forecast?.length || 0); // 1 for current + forecast days
+      this.weatherCycleIndex = (this.weatherCycleIndex + 1) % totalScreens;
+    }
+
+    // Draw current screen
+    if (this.weatherCycleIndex === 0) {
+      this.drawCurrentWeather();
+    } else if (this.weatherData.forecast && this.weatherData.forecast[this.weatherCycleIndex - 1]) {
+      this.drawForecastDay(this.weatherData.forecast[this.weatherCycleIndex - 1]);
+    }
   }
 
   private drawScrollingText(): void {
@@ -577,6 +778,188 @@ export class MatrixController {
     }
   }
 
+  private drawWeatherIcon(icon: string, x: number, y: number): void {
+    // Draw 30x30 pixel weather icons
+    switch (icon) {
+      case 'sunny':
+        // Yellow circle with rays
+        this.matrix.fgColor(0xFFD700);
+        for (let dy = 7; dy < 23; dy++) {
+          for (let dx = 7; dx < 23; dx++) {
+            const dist = Math.sqrt((dx - 15) * (dx - 15) + (dy - 15) * (dy - 15));
+            if (dist < 8) {
+              this.matrix.setPixel(x + dx, y + dy);
+            }
+          }
+        }
+        // Rays
+        for (let i = 0; i < 2; i++) {
+          this.matrix.setPixel(x + 15, y + 1 + i);
+          this.matrix.setPixel(x + 15, y + 27 + i);
+          this.matrix.setPixel(x + 1 + i, y + 15);
+          this.matrix.setPixel(x + 27 + i, y + 15);
+        }
+        break;
+
+      case 'partly-cloudy':
+        // Sun (yellow)
+        this.matrix.fgColor(0xFFD700);
+        for (let dy = 3; dy < 15; dy++) {
+          for (let dx = 3; dx < 15; dx++) {
+            const dist = Math.sqrt((dx - 9) * (dx - 9) + (dy - 9) * (dy - 9));
+            if (dist < 6) {
+              this.matrix.setPixel(x + dx, y + dy);
+            }
+          }
+        }
+        // Cloud (white)
+        this.matrix.fgColor(0xFFFFFF);
+        for (let dy = 15; dy < 27; dy++) {
+          for (let dx = 7; dx < 27; dx++) {
+            if (dy < 21 || (dx > 10 && dx < 23)) {
+              this.matrix.setPixel(x + dx, y + dy);
+            }
+          }
+        }
+        break;
+
+      case 'cloudy':
+        // Gray cloud
+        this.matrix.fgColor(0x808080);
+        for (let dy = 7; dy < 23; dy++) {
+          for (let dx = 3; dx < 27; dx++) {
+            if (dy < 17 || (dx > 6 && dx < 23)) {
+              this.matrix.setPixel(x + dx, y + dy);
+            }
+          }
+        }
+        break;
+
+      case 'rainy':
+        // Cloud
+        this.matrix.fgColor(0x808080);
+        for (let dy = 3; dy < 15; dy++) {
+          for (let dx = 3; dx < 27; dx++) {
+            if (dy < 11 || (dx > 6 && dx < 23)) {
+              this.matrix.setPixel(x + dx, y + dy);
+            }
+          }
+        }
+        // Rain drops (blue)
+        this.matrix.fgColor(0x4444FF);
+        for (let i = 0; i < 2; i++) {
+          this.matrix.setPixel(x + 7, y + 18 + i);
+          this.matrix.setPixel(x + 7, y + 22 + i);
+          this.matrix.setPixel(x + 15, y + 20 + i);
+          this.matrix.setPixel(x + 15, y + 24 + i);
+          this.matrix.setPixel(x + 21, y + 18 + i);
+          this.matrix.setPixel(x + 21, y + 22 + i);
+        }
+        break;
+
+      case 'snowy':
+        // Snowflake (white)
+        this.matrix.fgColor(0xFFFFFF);
+        // Vertical line
+        for (let dy = 3; dy < 27; dy++) {
+          this.matrix.setPixel(x + 15, y + dy);
+        }
+        // Horizontal line
+        for (let dx = 3; dx < 27; dx++) {
+          this.matrix.setPixel(x + dx, y + 15);
+        }
+        // Diagonals
+        for (let d = 5; d < 25; d++) {
+          this.matrix.setPixel(x + d, y + d);
+          this.matrix.setPixel(x + (29 - d), y + d);
+        }
+        break;
+
+      case 'thunderstorm':
+        // Cloud (dark gray)
+        this.matrix.fgColor(0x404040);
+        for (let dy = 3; dy < 15; dy++) {
+          for (let dx = 3; dx < 27; dx++) {
+            if (dy < 11 || (dx > 6 && dx < 23)) {
+              this.matrix.setPixel(x + dx, y + dy);
+            }
+          }
+        }
+        // Lightning bolt (yellow)
+        this.matrix.fgColor(0xFFFF00);
+        this.matrix.setPixel(x + 15, y + 15);
+        this.matrix.setPixel(x + 14, y + 17);
+        this.matrix.setPixel(x + 15, y + 19);
+        this.matrix.setPixel(x + 14, y + 21);
+        this.matrix.setPixel(x + 13, y + 23);
+        this.matrix.setPixel(x + 14, y + 25);
+        break;
+    }
+  }
+
+  private drawCurrentWeather(): void {
+    if (!this.weatherData.current) return;
+
+    const { temp, condition, icon, humidity, location } = this.weatherData.current;
+
+    // Left side: Temperature and icon
+    const tempText = `${temp}F`;
+    this.matrix
+      .fgColor(0xFFAA00)
+      .brightness(this.state.brightness || 80)
+      .drawText(tempText, 8, 9);
+
+    // Weather icon below temp
+    this.drawWeatherIcon(icon, 14, 23);
+
+    // Right side: Location (truncate if needed)
+    const shortLocation = location.length > 9 ? location.substring(0, 9) : location;
+    this.matrix
+      .fgColor(0xFFFFFF)
+      .drawText(shortLocation, 68, 2);
+
+    // Condition (truncate if needed)
+    const shortCondition = condition.length > 8 ? condition.substring(0, 8) : condition;
+    this.matrix
+      .fgColor(0xCCCCCC)
+      .drawText(shortCondition, 68, 20);
+
+    // Humidity
+    this.matrix
+      .fgColor(0x88AAFF)
+      .drawText(`${humidity}%`, 68, 38);
+  }
+
+  private drawForecastDay(day: {date: string, high: number, low: number, condition: string, icon: string}): void {
+    const { date, high, low, condition, icon } = day;
+
+    // Left side: Day name and icon
+    this.matrix
+      .fgColor(0xFFFFFF)
+      .brightness(this.state.brightness || 80)
+      .drawText(date, 4, 2);
+
+    // Weather icon
+    this.drawWeatherIcon(icon, 14, 23);
+
+    // Right side: High/Low temps
+    const tempText = `H:${high}F`;
+    this.matrix
+      .fgColor(0xFF6600)
+      .drawText(tempText, 68, 8);
+
+    const lowText = `L:${low}F`;
+    this.matrix
+      .fgColor(0x66AAFF)
+      .drawText(lowText, 68, 26);
+
+    // Condition (truncate if needed)
+    const shortCondition = condition.length > 8 ? condition.substring(0, 8) : condition;
+    this.matrix
+      .fgColor(0xCCCCCC)
+      .drawText(shortCondition, 68, 44);
+  }
+
   private drawLine(x0: number, y0: number, x1: number, y1: number, color: number): void {
     // Bresenham's line algorithm
     const dx = Math.abs(x1 - x0);
@@ -648,6 +1031,26 @@ export class MatrixController {
 
   getCurrentImagePath(): string | undefined {
     return this.state.imagePath;
+  }
+
+  async setWeatherZipcode(zipcode: string): Promise<void> {
+    this.weatherConfig.zipcode = zipcode;
+
+    // Save to config file
+    try {
+      const configPath = join(dirname(fileURLToPath(import.meta.url)), '../../config/weather.json');
+      await writeFile(configPath, JSON.stringify(this.weatherConfig, null, 2));
+      console.log('Weather config saved:', zipcode);
+
+      // Fetch weather data immediately
+      await this.fetchWeatherData();
+    } catch (error) {
+      console.error('Failed to save weather config:', error);
+    }
+  }
+
+  getWeatherZipcode(): string | undefined {
+    return this.weatherConfig.zipcode;
   }
 
   async setImage(imagePath: string): Promise<void> {

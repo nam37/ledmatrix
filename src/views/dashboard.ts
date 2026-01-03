@@ -232,5 +232,35 @@ export const dashboard = (state: DisplayState) => html`
       </div>
     </div>
 
+    <!-- Weather Configuration Card -->
+    <div>
+      <div class="uk-card uk-card-default uk-card-body uk-card-hover">
+        <h3 class="uk-card-title">
+          <span uk-icon="icon: cloud; ratio: 1.2" class="uk-margin-small-right"></span>
+          Weather Settings
+        </h3>
+        <form hx-post="/api/weather/config" hx-target="#weather-message" hx-swap="innerHTML" class="uk-form-stacked">
+          <div class="uk-margin">
+            <label class="uk-form-label">Zipcode</label>
+            <input
+              type="text"
+              name="zipcode"
+              placeholder="Enter 5-digit zipcode..."
+              maxlength="5"
+              pattern="[0-9]{5}"
+              class="uk-input"
+            />
+            <p class="uk-text-meta uk-margin-small-top">
+              Get your free API key at <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>
+            </p>
+          </div>
+          <button type="submit" class="uk-button uk-button-primary uk-width-1-1">
+            <span uk-icon="icon: location"></span> Save Location
+          </button>
+        </form>
+        <div id="weather-message" class="uk-margin-small-top"></div>
+      </div>
+    </div>
+
   </div>
 `;

@@ -9,7 +9,7 @@ export function createPageRoutes(matrixController: MatrixController) {
   // Main dashboard
   pages.get('/', (c) => {
     const state = matrixController.getState();
-    return c.html(layout('LED Matrix Dashboard', dashboard(state)));
+    return c.html(layout('LED Matrix Dashboard', dashboard(state) as any));
   });
 
   return pages;

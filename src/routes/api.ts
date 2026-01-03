@@ -243,5 +243,36 @@ export function createApiRoutes(matrixController: MatrixController) {
     }
   });
 
+  // Configure weather location
+  api.post('/weather/config', async (c) => {
+    try {
+      const formData = await c.req.parseBody();
+      const zipcode = formData.zipcode as string;
+
+      if (!zipcode || !/^\d{5}$/.test(zipcode)) {
+        return c.html(html`
+          <div class="uk-alert-danger" uk-alert>
+            <p><span uk-icon="icon: warning"></span> Please enter a valid 5-digit zipcode</p>
+          </div>
+        `);
+      }
+
+      await matrixController.setWeatherZipcode(zipcode);
+
+      return c.html(html`
+        <div class="uk-alert-success" uk-alert>
+          <p><span uk-icon="icon: check"></span> Location set to ${zipcode}</p>
+        </div>
+      `);
+    } catch (error) {
+      console.error('Weather config error:', error);
+      return c.html(html`
+        <div class="uk-alert-danger" uk-alert>
+          <p><span uk-icon="icon: warning"></span> Failed to save location</p>
+        </div>
+      `);
+    }
+  });
+
   return api;
 }

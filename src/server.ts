@@ -15,7 +15,7 @@ const app = new Hono();
 const isRaspberryPi = os.platform() === 'linux' && os.arch() === 'arm64';
 const isDevelopment = process.env.NODE_ENV === 'development' || !isRaspberryPi;
 
-let MatrixController;
+let MatrixController: any;
 if (isDevelopment) {
   console.log('🔧 Development Mode: Using Mock Matrix Controller');
   const MockModule = await import('./matrix/MockMatrixController.js');
@@ -27,7 +27,7 @@ if (isDevelopment) {
 }
 
 // Initialize LED Matrix Controller
-const matrixController = new MatrixController();
+const matrixController: any = new MatrixController();
 matrixController.start();
 
 // Graceful shutdown
