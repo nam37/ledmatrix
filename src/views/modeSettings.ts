@@ -172,6 +172,33 @@ export const plasmaModeSettings = (state: DisplayState) => html`
   <div id="mode-settings-message" class="uk-margin-small-top"></div>
 `;
 
+// Spectrum mode settings
+export const spectrumModeSettings = (state: DisplayState) => html`
+  <h3 class="uk-card-title">Spectrum Settings</h3>
+  <form hx-post="/api/mode-options/spectrum" hx-target="#mode-settings-message" hx-swap="innerHTML" class="uk-form-stacked">
+    <div class="uk-margin">
+      <label class="uk-form-label">Visualization Style</label>
+      <select name="spectrumStyle" class="uk-select">
+        <option value="bars" ${state.spectrumStyle === 'bars' ? 'selected' : ''}>Frequency Bars</option>
+        <option value="waveform" ${state.spectrumStyle === 'waveform' ? 'selected' : ''}>Waveform</option>
+        <option value="heartbeat" ${state.spectrumStyle === 'heartbeat' ? 'selected' : ''}>Heartbeat</option>
+      </select>
+    </div>
+    <div class="uk-margin">
+      <label class="uk-form-label">Color Mode</label>
+      <select name="spectrumColor" class="uk-select">
+        <option value="rainbow" ${state.spectrumColor === 'rainbow' ? 'selected' : ''}>Rainbow</option>
+        <option value="gradient" ${state.spectrumColor === 'gradient' ? 'selected' : ''}>Gradient</option>
+        <option value="solid" ${state.spectrumColor === 'solid' ? 'selected' : ''}>Solid Color</option>
+      </select>
+    </div>
+    <button type="submit" class="uk-button uk-button-primary uk-width-1-1">
+      <span uk-icon="icon: check"></span> Apply Settings
+    </button>
+  </form>
+  <div id="mode-settings-message" class="uk-margin-small-top"></div>
+`;
+
 // Empty settings for modes with no config
 export const emptyModeSettings = (modeName: string) => html`
   <h3 class="uk-card-title">${modeName} Mode</h3>
@@ -206,6 +233,8 @@ export const getModeSettings = (state: DisplayState, imageInfos?: ImageInfo[], c
       return emptyModeSettings('Pulse');
     case 'maze':
       return mazeModeSettings(state);
+    case 'spectrum':
+      return spectrumModeSettings(state);
     case 'off':
       return emptyModeSettings('Off');
     default:

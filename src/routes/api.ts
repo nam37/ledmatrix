@@ -39,7 +39,7 @@ export function createApiRoutes(matrixController: MatrixController) {
     const formData = await c.req.parseBody();
     const mode = formData.mode as DisplayMode;
 
-    if (['clock', 'text', 'weather', 'scroll', 'rainbow', 'plasma', 'squares', 'life', 'pulse', 'image', 'maze', 'off'].includes(mode)) {
+    if (['clock', 'text', 'weather', 'scroll', 'rainbow', 'plasma', 'squares', 'life', 'pulse', 'image', 'maze', 'spectrum', 'off'].includes(mode)) {
       matrixController.setMode(mode);
       const state = matrixController.getState();
 
@@ -153,6 +153,21 @@ export function createApiRoutes(matrixController: MatrixController) {
     return c.html(html`
       <div class="uk-alert-success" uk-alert>
         <p><span uk-icon="icon: check"></span> Plasma settings updated</p>
+      </div>
+    `);
+  });
+
+  // Mode options - Spectrum
+  api.post('/mode-options/spectrum', async (c) => {
+    const formData = await c.req.parseBody();
+    const spectrumStyle = formData.spectrumStyle as 'bars' | 'waveform' | 'heartbeat';
+    const spectrumColor = formData.spectrumColor as 'rainbow' | 'gradient' | 'solid';
+
+    matrixController.setModeOptions({ spectrumStyle, spectrumColor });
+
+    return c.html(html`
+      <div class="uk-alert-success" uk-alert>
+        <p><span uk-icon="icon: check"></span> Spectrum settings updated</p>
       </div>
     `);
   });

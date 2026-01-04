@@ -5,7 +5,7 @@ import { dirname, join } from 'path';
 import sharp from 'sharp';
 import { readFile, writeFile } from 'fs/promises';
 
-export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'image' | 'maze' | 'off';
+export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'image' | 'maze' | 'spectrum' | 'off';
 
 export interface DisplayState {
   mode: DisplayMode;
@@ -18,6 +18,8 @@ export interface DisplayState {
   clockFormat?: '12hour' | '24hour';
   clockColor?: 'solid' | 'rainbow';
   plasmaPattern?: 'classic' | 'waves' | 'cellular' | 'psychedelic';
+  spectrumStyle?: 'bars' | 'waveform' | 'heartbeat';
+  spectrumColor?: 'rainbow' | 'gradient' | 'solid';
 }
 
 export class MatrixController {
@@ -85,6 +87,8 @@ export class MatrixController {
       clockFormat: '12hour',
       clockColor: 'rainbow',
       plasmaPattern: 'classic',
+      spectrumStyle: 'bars',
+      spectrumColor: 'rainbow',
     };
 
     // Debug font metrics
@@ -174,6 +178,9 @@ export class MatrixController {
         break;
       case 'maze':
         this.drawMaze();
+        break;
+      case 'spectrum':
+        this.drawSpectrum();
         break;
       case 'off':
         // Keep clear
@@ -1071,6 +1078,184 @@ export class MatrixController {
     const height = this.matrix.height();
     this.matrix.brightness(this.state.brightness || 80);
     this.matrix.drawBuffer(this.imageBuffer, width, height);
+  }
+
+  // Spectrum mode visualization methods
+  private generateSimulatedFrequencyData(): number[] {
+    const bands = 20;
+    const data: number[] = [];
+
+    for (let i = 0; i < bands; i++) {
+      // Mix of sine waves with different frequencies for realistic spectrum
+      const bass = Math.sin(this.animationFrame * 0.05 + i * 0.3) * 0.8;
+      const mid = Math.sin(this.animationFrame * 0.1 + i * 0.5) * 0.5;
+      const high = Math.sin(this.animationFrame * 0.15 + i * 0.7) * 0.3;
+
+      // Combine and normalize to 0-1 range
+      const value = Math.max(0, (bass + mid + high + 1.5) / 3);
+      data.push(value);
+    }
+
+    return data;
+  }
+
+  private generateSimulatedWaveform(): number[] {
+    const samples = 192; // Match matrix width
+    const data: number[] = [];
+
+    for (let i = 0; i < samples; i++) {
+      // Multiple frequency components for realistic waveform
+      const wave = Math.sin((i + this.animationFrame) * 0.1) * 0.5 +
+                   Math.sin((i + this.animationFrame) * 0.05) * 0.3 +
+                   Math.sin((i + this.animationFrame) * 0.2) * 0.2;
+
+      // Normalize to 0-1 range
+      data.push((wave + 1) / 2);
+    }
+
+    return data;
+  }
+
+  private drawSpectrum(): void {
+    const style = this.state.spectrumStyle || 'bars';
+
+    switch (style) {
+      case 'bars':
+        this.drawSpectrumBars();
+        break;
+      case 'waveform':
+        this.drawSpectrumWaveform();
+        break;
+      case 'heartbeat':
+        this.drawSpectrumHeartbeat();
+        break;
+    }
+  }
+
+  private drawSpectrumBars(): void {
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+    const frequencyData = this.generateSimulatedFrequencyData();
+    const bands = frequencyData.length;
+    const barWidth = Math.floor(width / bands);
+    const colorMode = this.state.spectrumColor || 'rainbow';
+
+    for (let i = 0; i < bands; i++) {
+      const barHeight = Math.floor(frequencyData[i] * height);
+      const x = i * barWidth;
+
+      // Determine color based on color mode
+      let color: number;
+      if (colorMode === 'rainbow') {
+        const hue = i / bands;
+        color = this.hsvToRgb(hue, 1, this.state.brightness! / 100);
+      } else if (colorMode === 'gradient') {
+        const hue = 0.6 - (frequencyData[i] * 0.4); // Blue to red gradient
+        color = this.hsvToRgb(hue, 1, this.state.brightness! / 100);
+      } else {
+        color = 0x00FF00; // Solid green
+      }
+
+      // Draw vertical bar from bottom
+      for (let y = height - barHeight; y < height; y++) {
+        for (let bx = 0; bx < barWidth - 1; bx++) {
+          if (x + bx < width) {
+            this.matrix.fgColor(color).setPixel(x + bx, y);
+          }
+        }
+      }
+    }
+  }
+
+  private drawSpectrumWaveform(): void {
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+    const waveformData = this.generateSimulatedWaveform();
+    const centerY = height / 2;
+    const colorMode = this.state.spectrumColor || 'rainbow';
+
+    for (let x = 0; x < width && x < waveformData.length; x++) {
+      // Map 0-1 waveform data to pixel Y position
+      const y = Math.floor((1 - waveformData[x]) * height);
+
+      // Determine color
+      let color: number;
+      if (colorMode === 'rainbow') {
+        const hue = (x + this.animationFrame * 2) % width / width;
+        color = this.hsvToRgb(hue, 1, this.state.brightness! / 100);
+      } else if (colorMode === 'gradient') {
+        const hue = 0.5 + (waveformData[x] - 0.5) * 0.3;
+        color = this.hsvToRgb(hue, 1, this.state.brightness! / 100);
+      } else {
+        color = 0x00FFFF; // Solid cyan
+      }
+
+      // Draw waveform line with thickness
+      for (let dy = -1; dy <= 1; dy++) {
+        const py = y + dy;
+        if (py >= 0 && py < height) {
+          this.matrix.fgColor(color).setPixel(x, py);
+        }
+      }
+    }
+
+    // Draw center line (zero reference)
+    const centerLineColor = 0x404040;
+    for (let x = 0; x < width; x += 4) {
+      this.matrix.fgColor(centerLineColor).setPixel(x, Math.floor(centerY));
+    }
+  }
+
+  private drawSpectrumHeartbeat(): void {
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // Create heartbeat pulse pattern (lub-dub)
+    const beatCycle = (this.animationFrame * 0.15) % (Math.PI * 4);
+    let pulse: number;
+
+    if (beatCycle < Math.PI * 0.5) {
+      // First beat (lub)
+      pulse = Math.sin(beatCycle * 4) * 0.8;
+    } else if (beatCycle < Math.PI * 1.2) {
+      // Second beat (dub) - smaller
+      pulse = Math.sin((beatCycle - Math.PI * 0.6) * 5) * 0.5;
+    } else {
+      // Rest period
+      pulse = 0;
+    }
+
+    pulse = Math.max(0, pulse);
+    const radius = 10 + pulse * 15; // Pulsing radius
+
+    // Draw expanding circle/heart shape
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Multiple concentric circles for heartbeat effect
+        if (distance < radius && distance > radius - 3) {
+          const colorMode = this.state.spectrumColor || 'rainbow';
+          let color: number;
+
+          if (colorMode === 'rainbow') {
+            const hue = (distance / radius + this.animationFrame * 0.01) % 1;
+            color = this.hsvToRgb(hue, 1, pulse);
+          } else if (colorMode === 'gradient') {
+            const hue = 0; // Red for heartbeat
+            color = this.hsvToRgb(hue, 1, pulse);
+          } else {
+            color = 0xFF0000; // Solid red
+          }
+
+          this.matrix.fgColor(color).setPixel(x, y);
+        }
+      }
+    }
   }
 
   // Public API

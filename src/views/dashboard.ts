@@ -117,6 +117,16 @@ export const modeButtons = (currentMode: string) => html`
   <div>
     <button
       hx-post="/api/mode"
+      hx-vals='{"mode": "spectrum"}'
+      hx-target="#mode-buttons"
+      hx-swap="innerHTML"
+      class="uk-button uk-button-default uk-width-1-1 ${currentMode === 'spectrum' ? 'uk-button-primary' : ''}">
+      <span uk-icon="icon: album"></span> Spectrum
+    </button>
+  </div>
+  <div>
+    <button
+      hx-post="/api/mode"
       hx-vals='{"mode": "off"}'
       hx-target="#mode-buttons"
       hx-swap="innerHTML"
