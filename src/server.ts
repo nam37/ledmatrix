@@ -3,7 +3,6 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { createApiRoutes } from './routes/api.js';
 import { createPageRoutes } from './routes/pages.js';
-import { createImageRoutes } from './routes/images.js';
 import * as dotenv from 'dotenv';
 import * as os from 'os';
 
@@ -51,7 +50,6 @@ app.use('/uploads/*', serveStatic({ root: './public' }));
 // Routes
 app.route('/', createPageRoutes(matrixController));
 app.route('/api', createApiRoutes(matrixController));
-app.route('/images', createImageRoutes(matrixController));
 
 // Start server
 const port = parseInt(process.env.PORT || '3000');

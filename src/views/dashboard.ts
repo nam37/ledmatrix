@@ -1,5 +1,7 @@
 import { html } from 'hono/html';
 import { DisplayState } from '../matrix/MatrixController.js';
+import { getModeSettings } from './modeSettings.js';
+import { ImageInfo } from './imageGallery.js';
 
 export const modeButtons = (currentMode: string) => html`
   <div>
@@ -124,10 +126,10 @@ export const modeButtons = (currentMode: string) => html`
   </div>
 `;
 
-export const dashboard = (state: DisplayState) => html`
-  <div class="uk-grid-match uk-child-width-1-2@m uk-child-width-1-1@s" uk-grid>
+export const dashboard = (state: DisplayState, imageInfos?: ImageInfo[], currentImagePath?: string) => html`
+  <div class="uk-child-width-1-2@m uk-child-width-1-1@s" uk-grid>
 
-    <!-- Current Status Card -->
+    <!-- TOP LEFT: Current Mode Status -->
     <div>
       <div class="uk-card uk-card-default uk-card-body uk-card-hover">
         <h3 class="uk-card-title">
@@ -149,7 +151,14 @@ export const dashboard = (state: DisplayState) => html`
       </div>
     </div>
 
-    <!-- Display Modes Card -->
+    <!-- TOP RIGHT: Mode-Specific Settings -->
+    <div>
+      <div id="mode-settings" class="uk-card uk-card-default uk-card-body uk-card-hover">
+        ${getModeSettings(state, imageInfos, currentImagePath)}
+      </div>
+    </div>
+
+    <!-- BOTTOM LEFT: Mode Selection Buttons -->
     <div>
       <div class="uk-card uk-card-default uk-card-body uk-card-hover">
         <h3 class="uk-card-title">
@@ -162,44 +171,20 @@ export const dashboard = (state: DisplayState) => html`
       </div>
     </div>
 
-    <!-- Custom Text Card -->
+    <!-- BOTTOM RIGHT: System Settings -->
     <div>
       <div class="uk-card uk-card-default uk-card-body uk-card-hover">
         <h3 class="uk-card-title">
-          <span uk-icon="icon: pencil; ratio: 1.2" class="uk-margin-small-right"></span>
-          Custom Text
+          <span uk-icon="icon: cog; ratio: 1.2" class="uk-margin-small-right"></span>
+          System Settings
         </h3>
-        <form hx-post="/api/text" hx-target="#message" hx-swap="innerHTML" class="uk-form-stacked">
-          <div class="uk-margin">
-            <input
-              type="text"
-              name="text"
-              placeholder="Enter text to display..."
-              value="${state.text || ''}"
-              maxlength="50"
-              class="uk-input"
-            />
-          </div>
-          <button type="submit" class="uk-button uk-button-primary uk-width-1-1">
-            <span uk-icon="icon: check"></span> Update Text
-          </button>
-        </form>
-        <div id="message" class="uk-margin-small-top"></div>
-      </div>
-    </div>
 
-    <!-- Brightness Control Card -->
-    <div>
-      <div class="uk-card uk-card-default uk-card-body uk-card-hover">
-        <h3 class="uk-card-title">
-          <span uk-icon="icon: sun; ratio: 1.2" class="uk-margin-small-right"></span>
-          Brightness Control
-        </h3>
-        <form hx-post="/api/brightness" hx-target="#brightness-message" hx-swap="innerHTML" class="uk-form-stacked">
-          <div class="uk-margin">
-            <label class="uk-form-label">
-              Brightness: <span class="uk-text-bold uk-text-primary">${state.brightness || 80}%</span>
-            </label>
+        <!-- Brightness Control -->
+        <div class="uk-margin">
+          <label class="uk-form-label">
+            Brightness: <span class="uk-text-bold uk-text-primary">${state.brightness || 80}%</span>
+          </label>
+          <form hx-post="/api/brightness" hx-target="#brightness-message" hx-swap="innerHTML" class="uk-form-stacked">
             <input
               type="range"
               name="brightness"
@@ -209,56 +194,36 @@ export const dashboard = (state: DisplayState) => html`
               class="uk-range"
               oninput="this.previousElementSibling.querySelector('span').textContent = this.value + '%'"
             />
-          </div>
-          <button type="submit" class="uk-button uk-button-secondary uk-width-1-1">
-            <span uk-icon="icon: check"></span> Set Brightness
-          </button>
-        </form>
-        <div id="brightness-message" class="uk-margin-small-top"></div>
-      </div>
-    </div>
+            <button type="submit" class="uk-button uk-button-secondary uk-width-1-1 uk-margin-small-top">
+              <span uk-icon="icon: check"></span> Set Brightness
+            </button>
+          </form>
+          <div id="brightness-message" class="uk-margin-small-top"></div>
+        </div>
 
-    <!-- Image Management Card -->
-    <div>
-      <div class="uk-card uk-card-default uk-card-body uk-card-hover">
-        <h3 class="uk-card-title">
-          <span uk-icon="icon: image; ratio: 1.2" class="uk-margin-small-right"></span>
-          Image Management
-        </h3>
-        <p class="uk-text-muted">Upload and manage images to display on the LED matrix.</p>
-        <a href="/images" class="uk-button uk-button-primary uk-width-1-1">
-          <span uk-icon="icon: folder"></span> Manage Images
-        </a>
-      </div>
-    </div>
+        <hr class="uk-divider-small">
 
-    <!-- Weather Configuration Card -->
-    <div>
-      <div class="uk-card uk-card-default uk-card-body uk-card-hover">
-        <h3 class="uk-card-title">
-          <span uk-icon="icon: cloud; ratio: 1.2" class="uk-margin-small-right"></span>
-          Weather Settings
-        </h3>
-        <form hx-post="/api/weather/config" hx-target="#weather-message" hx-swap="innerHTML" class="uk-form-stacked">
-          <div class="uk-margin">
-            <label class="uk-form-label">Zipcode</label>
-            <input
-              type="text"
-              name="zipcode"
-              placeholder="Enter 5-digit zipcode..."
-              maxlength="5"
-              pattern="[0-9]{5}"
-              class="uk-input"
-            />
-            <p class="uk-text-meta uk-margin-small-top">
-              Get your free API key at <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>
-            </p>
-          </div>
-          <button type="submit" class="uk-button uk-button-primary uk-width-1-1">
-            <span uk-icon="icon: location"></span> Save Location
+        <!-- System Info -->
+        <div class="uk-margin" id="system-info" hx-get="/api/system-info" hx-trigger="load, every 5s" hx-swap="innerHTML">
+          <!-- Auto-refreshing system info will be loaded here -->
+        </div>
+
+        <hr class="uk-divider-small">
+
+        <!-- Control Buttons -->
+        <div class="uk-margin">
+          <button hx-post="/api/system/restart" hx-target="#system-control-message" hx-swap="innerHTML"
+                  hx-confirm="Restart the LED matrix service? This will interrupt the current display."
+                  class="uk-button uk-button-danger uk-width-1-1 uk-margin-small-bottom">
+            <span uk-icon="icon: refresh"></span> Restart Service
           </button>
-        </form>
-        <div id="weather-message" class="uk-margin-small-top"></div>
+          <button hx-post="/api/system/shutdown" hx-target="#system-control-message" hx-swap="innerHTML"
+                  hx-confirm="Shutdown the Raspberry Pi? You will need to physically power it back on."
+                  class="uk-button uk-button-danger uk-width-1-1">
+            <span uk-icon="icon: sign-out"></span> Shutdown System
+          </button>
+          <div id="system-control-message" class="uk-margin-small-top"></div>
+        </div>
       </div>
     </div>
 

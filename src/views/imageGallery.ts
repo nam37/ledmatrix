@@ -110,7 +110,8 @@ export const imageGallery = (images: ImageInfo[], currentImage?: string) => {
                   <button
                     hx-post="/api/images/set-active"
                     hx-vals='{"filename": "${image.filename}"}'
-                    hx-target="#gallery-container"
+                    hx-target="#mode-settings"
+                    hx-swap="innerHTML"
                     class="uk-button uk-button-small uk-button-primary uk-width-1-2">
                     <span uk-icon="icon: check; ratio: 0.8"></span> Activate
                   </button>
@@ -122,7 +123,8 @@ export const imageGallery = (images: ImageInfo[], currentImage?: string) => {
                 <button
                   hx-post="/api/images/delete"
                   hx-vals='{"filename": "${image.filename}"}'
-                  hx-target="#gallery-container"
+                  hx-target="#mode-settings"
+                  hx-swap="innerHTML"
                   hx-confirm="Are you sure you want to delete this image?"
                   class="uk-button uk-button-small uk-button-danger uk-width-1-2">
                   <span uk-icon="icon: trash; ratio: 0.8"></span> Delete

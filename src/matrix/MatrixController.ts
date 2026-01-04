@@ -12,6 +12,12 @@ export interface DisplayState {
   text?: string;
   brightness?: number;
   imagePath?: string;
+  // Mode-specific options
+  mazeSpeed?: 'slow' | 'medium' | 'fast';
+  mazeThickness?: 'small' | 'medium' | 'large';
+  clockFormat?: '12hour' | '24hour';
+  clockColor?: 'solid' | 'rainbow';
+  plasmaPattern?: 'classic' | 'waves' | 'cellular' | 'psychedelic';
 }
 
 export class MatrixController {
@@ -73,6 +79,12 @@ export class MatrixController {
     this.state = {
       mode: 'clock',
       brightness: 80,
+      // Default mode options
+      mazeSpeed: 'medium',
+      mazeThickness: 'medium',
+      clockFormat: '12hour',
+      clockColor: 'rainbow',
+      plasmaPattern: 'classic',
     };
 
     // Debug font metrics
@@ -173,8 +185,9 @@ export class MatrixController {
 
   private drawClock(): void {
     const now = new Date();
+    const hour12 = this.state.clockFormat === '12hour';
     const time = now.toLocaleTimeString('en-US', {
-      hour12: false,  // Use 24-hour format to fit on 64-pixel display
+      hour12: hour12,
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
@@ -203,8 +216,19 @@ export class MatrixController {
       this.clockY = Math.max(minY, Math.min(this.clockY, maxY));
     }
 
+    // Determine color based on mode
+    let color: number;
+    if (this.state.clockColor === 'rainbow') {
+      // Rainbow fade based on time
+      const hue = (this.animationFrame * 0.01) % 1;
+      color = this.hsvToRgb(hue, 1, this.state.brightness! / 100);
+    } else {
+      // Solid gold color
+      color = 0xFFD700;
+    }
+
     this.matrix
-      .fgColor(0xFFD700) // Gold color
+      .fgColor(color)
       .brightness(this.state.brightness || 80)
       .drawText(time, Math.floor(this.clockX), Math.floor(this.clockY));
   }
@@ -423,14 +447,44 @@ export class MatrixController {
     const width = this.matrix.width();
     const height = this.matrix.height();
     const time = this.animationFrame * 0.1;
+    const pattern = this.state.plasmaPattern || 'classic';
 
     for (let x = 0; x < width; x++) {
       for (let y = 0; y < height; y++) {
-        // Plasma effect using sine waves
-        const value = Math.sin(x * 0.1 + time) +
-                     Math.sin(y * 0.1 + time) +
-                     Math.sin((x + y) * 0.1 + time) +
-                     Math.sin(Math.sqrt(x * x + y * y) * 0.1 + time);
+        let value: number;
+
+        switch (pattern) {
+          case 'classic':
+            // Classic plasma with sine waves
+            value = Math.sin(x * 0.1 + time) +
+                   Math.sin(y * 0.1 + time) +
+                   Math.sin((x + y) * 0.1 + time) +
+                   Math.sin(Math.sqrt(x * x + y * y) * 0.1 + time);
+            break;
+
+          case 'waves':
+            // Horizontal and vertical waves
+            value = Math.sin(x * 0.15 + time) * Math.cos(y * 0.15 - time) +
+                   Math.sin(y * 0.2 + time * 0.5);
+            break;
+
+          case 'cellular':
+            // Cellular/bubble pattern
+            const dist1 = Math.sqrt((x - width/3) ** 2 + (y - height/2) ** 2);
+            const dist2 = Math.sqrt((x - 2*width/3) ** 2 + (y - height/2) ** 2);
+            value = Math.sin(dist1 * 0.2 - time) + Math.sin(dist2 * 0.2 + time);
+            break;
+
+          case 'psychedelic':
+            // Complex interference pattern
+            value = Math.sin(x * 0.05 + time) * Math.sin(y * 0.05 - time) +
+                   Math.cos((x + y) * 0.08 + time * 1.5) +
+                   Math.sin(Math.sqrt((x - width/2) ** 2 + (y - height/2) ** 2) * 0.15 - time * 2);
+            break;
+
+          default:
+            value = 0;
+        }
 
         const hue = (value + 4) / 8; // Normalize to 0-1
         const color = this.hsvToRgb(hue, 1, this.state.brightness! / 100);
@@ -693,18 +747,27 @@ export class MatrixController {
   private drawMaze(): void {
     const width = this.matrix.width();
     const height = this.matrix.height();
-    const cols = Math.floor(width / this.mazeCellSize);
-    const rows = Math.floor(height / this.mazeCellSize);
 
-    // Initialize maze if needed
-    if (this.mazeGrid.length === 0 || this.mazeState === 'generating') {
+    // Determine cell size based on thickness setting
+    const thicknessMap = { small: 1, medium: 2, large: 3 };
+    const cellSize = thicknessMap[this.state.mazeThickness || 'medium'];
+
+    const cols = Math.floor(width / cellSize);
+    const rows = Math.floor(height / cellSize);
+
+    // Initialize maze if needed or if cell size changed
+    if (this.mazeGrid.length === 0 || this.mazeState === 'generating' || this.mazeCellSize !== cellSize) {
+      this.mazeCellSize = cellSize;
       this.initializeMaze();
     }
 
     // Handle solving state
     if (this.mazeState === 'solving') {
-      // Update every 2 frames for visible animation
-      if (this.animationFrame % 2 === 0) {
+      // Determine update frequency based on speed setting
+      const speedMap = { slow: 4, medium: 2, fast: 1 };
+      const updateInterval = speedMap[this.state.mazeSpeed || 'medium'];
+
+      if (this.animationFrame % updateInterval === 0) {
         const solved = this.solveMazeStep();
         if (solved) {
           this.mazeState = 'solved';
@@ -1023,6 +1086,11 @@ export class MatrixController {
 
   setBrightness(brightness: number): void {
     this.state.brightness = Math.max(0, Math.min(100, brightness));
+  }
+
+  setModeOptions(options: Partial<DisplayState>): void {
+    this.state = { ...this.state, ...options };
+    console.log('Mode options updated:', options);
   }
 
   getState(): DisplayState {

@@ -12,7 +12,7 @@ export function getMatrixConfig(): MatrixConfig {
   const matrixOptions: MatrixOptions = {
     rows: 64,
     cols: 64,
-    chainLength: 2,  // 2 panels chained horizontally = 128x64 display
+    chainLength: 3,  // 3 panels chained horizontally = 192x64 display
     hardwareMapping: GpioMapping.Regular,  // Using 'regular' mapping as shown in working demo
     brightness: 80,
     pwmBits: 11,
