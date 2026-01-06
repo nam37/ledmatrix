@@ -5,7 +5,7 @@ import { dirname, join } from 'path';
 import sharp from 'sharp';
 import { readFile, writeFile } from 'fs/promises';
 
-export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'image' | 'maze' | 'spectrum' | 'off';
+export type DisplayMode = 'clock' | 'text' | 'weather' | 'scroll' | 'rainbow' | 'plasma' | 'squares' | 'life' | 'pulse' | 'image' | 'maze' | 'spectrum' | 'fire' | 'pacman' | 'off';
 
 export interface DisplayState {
   mode: DisplayMode;
@@ -20,6 +20,11 @@ export interface DisplayState {
   plasmaPattern?: 'classic' | 'waves' | 'cellular' | 'psychedelic';
   spectrumStyle?: 'bars' | 'waveform' | 'heartbeat';
   spectrumColor?: 'rainbow' | 'gradient' | 'solid';
+  fireColorScheme?: 'traditional' | 'blue' | 'green' | 'purple';
+  fireIntensity?: 'calm' | 'normal' | 'intense';
+  fireSpeed?: 'slow' | 'normal' | 'fast';
+  pacmanSpeed?: 'slow' | 'normal' | 'fast';
+  pacmanDifficulty?: 'easy' | 'normal' | 'hard';
 }
 
 export class MatrixController {
@@ -66,6 +71,16 @@ export class MatrixController {
   } = {};
   private weatherCycleIndex: number = 0;
   private weatherCycleTimer: number = 0;
+  private fireHeatMap: number[][] = [];  // 2D heat map (0-1 values)
+  private pacmanMaze: number[][] = [];  // 0=empty, 1=wall, 2=dot, 3=power pellet
+  private pacmanPos: {x: number, y: number} = {x: 0, y: 0};
+  private pacmanDir: {x: number, y: number} = {x: 1, y: 0};
+  private ghosts: Array<{x: number, y: number, color: number, mode: 'chase' | 'scatter' | 'frightened', dir: {x: number, y: number}}> = [];
+  private pacmanScore: number = 0;
+  private pacmanPowerMode: boolean = false;
+  private pacmanPowerTimer: number = 0;
+  private pacmanMoveTimer: number = 0;
+  private pacmanDotsRemaining: number = 0;
 
   constructor() {
     const config = getMatrixConfig();
@@ -89,6 +104,11 @@ export class MatrixController {
       plasmaPattern: 'classic',
       spectrumStyle: 'bars',
       spectrumColor: 'rainbow',
+      fireColorScheme: 'traditional',
+      fireIntensity: 'normal',
+      fireSpeed: 'normal',
+      pacmanSpeed: 'normal',
+      pacmanDifficulty: 'normal',
     };
 
     // Debug font metrics
@@ -181,6 +201,12 @@ export class MatrixController {
         break;
       case 'spectrum':
         this.drawSpectrum();
+        break;
+      case 'fire':
+        this.drawFire();
+        break;
+      case 'pacman':
+        this.drawPacman();
         break;
       case 'off':
         // Keep clear
@@ -1256,6 +1282,617 @@ export class MatrixController {
         }
       }
     }
+  }
+
+  // Fire mode methods
+  private initializeFireHeatMap(): void {
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+
+    this.fireHeatMap = Array(height).fill(0).map(() => Array(width).fill(0));
+  }
+
+  private drawFire(): void {
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+
+    // Initialize heat map if needed
+    if (this.fireHeatMap.length === 0) {
+      this.initializeFireHeatMap();
+    }
+
+    // Get settings
+    const speed = this.state.fireSpeed || 'normal';
+    const intensity = this.state.fireIntensity || 'normal';
+    const colorScheme = this.state.fireColorScheme || 'traditional';
+
+    // Speed control - update every N frames
+    const speedMap = { slow: 3, normal: 2, fast: 1 };
+    const updateInterval = speedMap[speed];
+
+    if (this.animationFrame % updateInterval !== 0) {
+      // Just render without updating
+      this.renderFire(colorScheme);
+      return;
+    }
+
+    // Intensity affects heat generation
+    const intensityMap = { calm: 0.6, normal: 0.8, intense: 1.0 };
+    const heatMultiplier = intensityMap[intensity];
+
+    // Update heat map - process from bottom to top
+    for (let y = height - 1; y >= 0; y--) {
+      for (let x = 0; x < width; x++) {
+        if (y === height - 1) {
+          // Bottom row: generate varied heat with hot spots
+          let baseHeat = Math.random() * heatMultiplier * 0.5;
+
+          // Create moving hot spots (stronger flames)
+          const hotSpotFreq = 0.05; // 5% chance of hot spot
+          const hotSpotPhase = (this.animationFrame * 0.1 + x * 0.3) % (Math.PI * 2);
+          const hotSpotStrength = Math.sin(hotSpotPhase) * 0.5 + 0.5; // 0 to 1
+
+          if (Math.random() < hotSpotFreq || hotSpotStrength > 0.8) {
+            // Strong hot spot - creates taller flames
+            baseHeat += heatMultiplier * (0.8 + Math.random() * 0.4);
+          }
+
+          this.fireHeatMap[y][x] = Math.min(1.5, baseHeat);
+        } else {
+          // Average heat from below with cooling
+          let heatSum = 0;
+          let count = 0;
+
+          // Sample 3 pixels below: left-below, directly below, right-below
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            if (nx >= 0 && nx < width) {
+              heatSum += this.fireHeatMap[y + 1][nx];
+              count++;
+            }
+          }
+
+          // Average and cool
+          const avgHeat = count > 0 ? heatSum / count : 0;
+          const coolingFactor = 0.92; // Heat dissipates as it rises
+          this.fireHeatMap[y][x] = avgHeat * coolingFactor;
+        }
+      }
+    }
+
+    this.renderFire(colorScheme);
+  }
+
+  private renderFire(colorScheme: string): void {
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const heat = this.fireHeatMap[y][x];
+        const color = this.getFireColor(heat, colorScheme);
+        this.matrix.fgColor(color).setPixel(x, y);
+      }
+    }
+  }
+
+  private getFireColor(heat: number, colorScheme: string): number {
+    // Clamp heat to 0-1 range
+    heat = Math.max(0, Math.min(1, heat));
+
+    // Apply brightness
+    const brightness = this.state.brightness! / 100;
+    heat = heat * brightness;
+
+    let r, g, b;
+
+    switch (colorScheme) {
+      case 'traditional':
+        // Black -> Red -> Orange -> Yellow -> White
+        if (heat < 0.25) {
+          // Black to dark red
+          r = heat * 4 * 128;
+          g = 0;
+          b = 0;
+        } else if (heat < 0.5) {
+          // Dark red to bright red
+          r = 128 + (heat - 0.25) * 4 * 127;
+          g = 0;
+          b = 0;
+        } else if (heat < 0.75) {
+          // Red to orange
+          r = 255;
+          g = (heat - 0.5) * 4 * 200;
+          b = 0;
+        } else {
+          // Orange to yellow/white
+          r = 255;
+          g = 200 + (heat - 0.75) * 4 * 55;
+          b = (heat - 0.75) * 4 * 100;
+        }
+        break;
+
+      case 'blue':
+        // Black -> Dark Blue -> Cyan -> White
+        if (heat < 0.33) {
+          r = 0;
+          g = 0;
+          b = heat * 3 * 255;
+        } else if (heat < 0.66) {
+          r = 0;
+          g = (heat - 0.33) * 3 * 255;
+          b = 255;
+        } else {
+          r = (heat - 0.66) * 3 * 255;
+          g = 255;
+          b = 255;
+        }
+        break;
+
+      case 'green':
+        // Black -> Dark Green -> Bright Green -> Yellow
+        if (heat < 0.33) {
+          r = 0;
+          g = heat * 3 * 255;
+          b = 0;
+        } else if (heat < 0.66) {
+          r = (heat - 0.33) * 3 * 200;
+          g = 255;
+          b = 0;
+        } else {
+          r = 200 + (heat - 0.66) * 3 * 55;
+          g = 255;
+          b = (heat - 0.66) * 3 * 100;
+        }
+        break;
+
+      case 'purple':
+        // Black -> Dark Purple -> Magenta -> Pink
+        if (heat < 0.33) {
+          r = heat * 3 * 128;
+          g = 0;
+          b = heat * 3 * 255;
+        } else if (heat < 0.66) {
+          r = 128 + (heat - 0.33) * 3 * 127;
+          g = (heat - 0.33) * 3 * 100;
+          b = 255;
+        } else {
+          r = 255;
+          g = 100 + (heat - 0.66) * 3 * 155;
+          b = 255;
+        }
+        break;
+
+      default:
+        r = g = b = heat * 255;
+    }
+
+    return ((Math.floor(r) << 16) | (Math.floor(g) << 8) | Math.floor(b));
+  }
+
+  // Pac-Man mode methods
+  private initializePacmanMaze(): void {
+    const width = this.matrix.width();  // 192
+    const height = this.matrix.height();  // 64
+
+    // Create simplified Pac-Man maze scaled to fit
+    // Using 4x4 pixel cells = 48x16 grid
+    const gridWidth = 48;
+    const gridHeight = 16;
+
+    this.pacmanMaze = Array(gridHeight).fill(0).map(() => Array(gridWidth).fill(0));
+
+    // Draw classic Pac-Man maze pattern (simplified)
+    // Outer walls
+    for (let x = 0; x < gridWidth; x++) {
+      this.pacmanMaze[0][x] = 1;
+      this.pacmanMaze[gridHeight - 1][x] = 1;
+    }
+    for (let y = 0; y < gridHeight; y++) {
+      this.pacmanMaze[y][0] = 1;
+      this.pacmanMaze[y][gridWidth - 1] = 1;
+    }
+
+    // Simple open maze - minimal walls, no closed spaces, mirrored
+    const halfWidth = Math.floor(gridWidth / 2);
+
+    // Very sparse pattern - just a few obstacle walls
+    // Top horizontal barriers (short segments, well-spaced)
+    for (let x = 3; x <= 5; x++) this.pacmanMaze[3][x] = 1;
+    for (let x = 10; x <= 12; x++) this.pacmanMaze[3][x] = 1;
+    for (let x = 17; x <= 19; x++) this.pacmanMaze[3][x] = 1;
+
+    // Bottom horizontal barriers (mirrored pattern)
+    for (let x = 3; x <= 5; x++) this.pacmanMaze[12][x] = 1;
+    for (let x = 10; x <= 12; x++) this.pacmanMaze[12][x] = 1;
+    for (let x = 17; x <= 19; x++) this.pacmanMaze[12][x] = 1;
+
+    // Middle horizontal barriers
+    for (let x = 1; x <= 4; x++) this.pacmanMaze[8][x] = 1;
+    for (let x = 7; x <= 10; x++) this.pacmanMaze[8][x] = 1;
+    for (let x = 13; x <= 16; x++) this.pacmanMaze[8][x] = 1;
+
+    // Vertical barriers (short, non-connecting)
+    // Left side
+    for (let y = 5; y <= 7; y++) this.pacmanMaze[y][6] = 1;
+    for (let y = 9; y <= 11; y++) this.pacmanMaze[y][6] = 1;
+
+    // Center-left
+    for (let y = 1; y <= 2; y++) this.pacmanMaze[y][13] = 1;
+    for (let y = 5; y <= 6; y++) this.pacmanMaze[y][13] = 1;
+    for (let y = 10; y <= 11; y++) this.pacmanMaze[y][13] = 1;
+    for (let y = 13; y <= 14; y++) this.pacmanMaze[y][13] = 1;
+
+    // Near center
+    for (let y = 1; y <= 2; y++) this.pacmanMaze[y][18] = 1;
+    for (let y = 13; y <= 14; y++) this.pacmanMaze[y][18] = 1;
+
+    // Mirror the left half to create right half
+    for (let y = 0; y < gridHeight; y++) {
+      for (let x = 1; x < halfWidth; x++) {
+        const mirrorX = gridWidth - 1 - x;
+        this.pacmanMaze[y][mirrorX] = this.pacmanMaze[y][x];
+      }
+    }
+
+    // Ghost house in center (outline with door at top)
+    for (let x = 21; x <= 26; x++) {
+      this.pacmanMaze[7][x] = 1;  // Top wall
+      this.pacmanMaze[9][x] = 1;  // Bottom wall
+    }
+    for (let y = 7; y <= 9; y++) {
+      this.pacmanMaze[y][21] = 1; // Left wall
+      this.pacmanMaze[y][26] = 1; // Right wall
+    }
+    // Door opening at top center
+    this.pacmanMaze[7][23] = 0;
+    this.pacmanMaze[7][24] = 0;
+
+    // Now fill empty corridors with dots (2) and power pellets (3)
+    let dotCount = 0;
+    for (let y = 1; y < gridHeight - 1; y++) {
+      for (let x = 1; x < gridWidth - 1; x++) {
+        if (this.pacmanMaze[y][x] === 0) {
+          // Power pellets in four corners of the play area
+          if ((x === 1 && y === 1) || (x === gridWidth - 2 && y === 1) ||
+              (x === 1 && y === gridHeight - 2) || (x === gridWidth - 2 && y === gridHeight - 2)) {
+            this.pacmanMaze[y][x] = 3;
+            dotCount++;
+          } else {
+            // Regular dot
+            this.pacmanMaze[y][x] = 2;
+            dotCount++;
+          }
+        }
+      }
+    }
+
+    this.pacmanDotsRemaining = dotCount;
+
+    // Initialize Pac-Man position (left side corridor)
+    this.pacmanPos = {x: 7, y: 8};
+    this.pacmanDir = {x: 1, y: 0};
+    this.pacmanMaze[this.pacmanPos.y][this.pacmanPos.x] = 0; // Clear starting position
+
+    // Initialize ghosts (4 ghosts: red, pink, cyan, orange) - start just outside/inside ghost house
+    this.ghosts = [
+      {x: 23, y: 6, color: 0xFF0000, mode: 'chase', dir: {x: 1, y: 0}},  // Blinky (red) - just outside entrance
+      {x: 24, y: 6, color: 0xFFB8FF, mode: 'chase', dir: {x: -1, y: 0}}, // Pinky (pink) - just outside entrance
+      {x: 22, y: 8, color: 0x00FFFF, mode: 'scatter', dir: {x: 1, y: 0}}, // Inky (cyan) - inside house
+      {x: 25, y: 8, color: 0xFFB852, mode: 'scatter', dir: {x: -1, y: 0}},  // Clyde (orange) - inside house
+    ];
+
+    this.pacmanScore = 0;
+    this.pacmanPowerMode = false;
+    this.pacmanPowerTimer = 0;
+  }
+
+  private drawPacman(): void {
+    const width = this.matrix.width();
+    const height = this.matrix.height();
+    const cellSize = 4; // 4x4 pixels per grid cell
+
+    // Initialize if needed
+    if (this.pacmanMaze.length === 0) {
+      this.initializePacmanMaze();
+    }
+
+    // Get speed setting
+    const speed = this.state.pacmanSpeed || 'normal';
+    const speedMap = { slow: 4, normal: 2, fast: 1 };
+    const moveInterval = speedMap[speed];
+
+    // Update game logic
+    if (this.animationFrame % moveInterval === 0) {
+      this.updatePacmanGame();
+    }
+
+    // Render maze
+    this.renderPacmanMaze(cellSize);
+
+    // Render Pac-Man
+    this.renderPacmanCharacter(cellSize);
+
+    // Render ghosts
+    this.renderPacmanGhosts(cellSize);
+  }
+
+  private updatePacmanGame(): void {
+    const gridWidth = this.pacmanMaze[0].length;
+    const gridHeight = this.pacmanMaze.length;
+
+    // Update power mode timer
+    if (this.pacmanPowerMode) {
+      this.pacmanPowerTimer--;
+      if (this.pacmanPowerTimer <= 0) {
+        this.pacmanPowerMode = false;
+        // Return ghosts to chase mode
+        this.ghosts.forEach(ghost => {
+          if (ghost.mode === 'frightened') {
+            ghost.mode = 'chase';
+          }
+        });
+      }
+    }
+
+    // Move Pac-Man with improved AI
+    // Find nearest dot
+    let nearestDotDist = Infinity;
+    let nearestDotX = this.pacmanPos.x;
+    let nearestDotY = this.pacmanPos.y;
+
+    for (let y = 0; y < gridHeight; y++) {
+      for (let x = 0; x < gridWidth; x++) {
+        if (this.pacmanMaze[y][x] === 2 || this.pacmanMaze[y][x] === 3) {
+          const dist = Math.abs(x - this.pacmanPos.x) + Math.abs(y - this.pacmanPos.y);
+          if (dist < nearestDotDist) {
+            nearestDotDist = dist;
+            nearestDotX = x;
+            nearestDotY = y;
+          }
+        }
+      }
+    }
+
+    // Try to move toward nearest dot, but avoid reversing direction
+    const directions = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
+    const reverseDir = {x: -this.pacmanDir.x, y: -this.pacmanDir.y};
+
+    let bestDir = this.pacmanDir;
+    let bestDist = Infinity;
+    let foundValidMove = false;
+
+    // First try current direction
+    const continuePos = {
+      x: this.pacmanPos.x + this.pacmanDir.x,
+      y: this.pacmanPos.y + this.pacmanDir.y
+    };
+    if (continuePos.x >= 0 && continuePos.x < gridWidth &&
+        continuePos.y >= 0 && continuePos.y < gridHeight &&
+        this.pacmanMaze[continuePos.y][continuePos.x] !== 1) {
+      this.pacmanPos = continuePos;
+      foundValidMove = true;
+    } else {
+      // Current direction blocked, find best alternative (avoid reverse unless necessary)
+      for (const dir of directions) {
+        // Skip reverse direction on first pass
+        if (dir.x === reverseDir.x && dir.y === reverseDir.y) continue;
+
+        const testPos = {x: this.pacmanPos.x + dir.x, y: this.pacmanPos.y + dir.y};
+        if (testPos.x >= 0 && testPos.x < gridWidth &&
+            testPos.y >= 0 && testPos.y < gridHeight &&
+            this.pacmanMaze[testPos.y][testPos.x] !== 1) {
+          const dist = Math.abs(testPos.x - nearestDotX) + Math.abs(testPos.y - nearestDotY);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestDir = dir;
+            foundValidMove = true;
+          }
+        }
+      }
+
+      // If still no valid move, allow reverse direction
+      if (!foundValidMove) {
+        const testPos = {x: this.pacmanPos.x + reverseDir.x, y: this.pacmanPos.y + reverseDir.y};
+        if (testPos.x >= 0 && testPos.x < gridWidth &&
+            testPos.y >= 0 && testPos.y < gridHeight &&
+            this.pacmanMaze[testPos.y][testPos.x] !== 1) {
+          bestDir = reverseDir;
+          foundValidMove = true;
+        }
+      }
+
+      if (foundValidMove) {
+        this.pacmanDir = bestDir;
+        this.pacmanPos = {
+          x: this.pacmanPos.x + bestDir.x,
+          y: this.pacmanPos.y + bestDir.y
+        };
+      }
+    }
+
+    // Check for dot/pellet collision
+    const cell = this.pacmanMaze[this.pacmanPos.y][this.pacmanPos.x];
+    if (cell === 2) {
+      // Ate dot
+      this.pacmanScore += 10;
+      this.pacmanDotsRemaining--;
+      this.pacmanMaze[this.pacmanPos.y][this.pacmanPos.x] = 0;
+    } else if (cell === 3) {
+      // Ate power pellet
+      this.pacmanScore += 50;
+      this.pacmanDotsRemaining--;
+      this.pacmanMaze[this.pacmanPos.y][this.pacmanPos.x] = 0;
+      this.pacmanPowerMode = true;
+      this.pacmanPowerTimer = 60; // ~6 seconds at 10fps
+      this.ghosts.forEach(ghost => ghost.mode = 'frightened');
+    }
+
+    // Check for level completion
+    if (this.pacmanDotsRemaining === 0) {
+      this.initializePacmanMaze(); // Reset level
+    }
+
+    // Move ghosts
+    this.updatePacmanGhosts(gridWidth, gridHeight);
+
+    // Check ghost collisions
+    this.ghosts.forEach(ghost => {
+      if (Math.abs(ghost.x - this.pacmanPos.x) < 1 &&
+          Math.abs(ghost.y - this.pacmanPos.y) < 1) {
+        if (this.pacmanPowerMode && ghost.mode === 'frightened') {
+          // Pac-Man eats ghost
+          this.pacmanScore += 200;
+          ghost.x = 23; // Return to ghost house center
+          ghost.y = 8;  // Inside the ghost house
+          ghost.mode = 'scatter';
+        } else if (ghost.mode !== 'frightened') {
+          // Ghost catches Pac-Man - reset to starting position
+          this.pacmanPos = {x: 7, y: 8};
+          this.pacmanDir = {x: 1, y: 0};
+        }
+      }
+    });
+  }
+
+  private updatePacmanGhosts(gridWidth: number, gridHeight: number): void {
+    const difficulty = this.state.pacmanDifficulty || 'normal';
+
+    this.ghosts.forEach(ghost => {
+      // Simple ghost AI
+      let targetX, targetY;
+
+      if (ghost.mode === 'frightened') {
+        // Run away from Pac-Man
+        targetX = ghost.x - (this.pacmanPos.x - ghost.x);
+        targetY = ghost.y - (this.pacmanPos.y - ghost.y);
+      } else if (ghost.mode === 'chase') {
+        // Chase Pac-Man (with difficulty modifier)
+        if (difficulty === 'easy') {
+          // Random movement
+          targetX = Math.floor(Math.random() * gridWidth);
+          targetY = Math.floor(Math.random() * gridHeight);
+        } else {
+          targetX = this.pacmanPos.x;
+          targetY = this.pacmanPos.y;
+        }
+      } else {
+        // Scatter to corners
+        targetX = ghost.color === 0xFF0000 ? gridWidth - 2 : 2;
+        targetY = ghost.color === 0xFF0000 ? 2 : gridHeight - 2;
+      }
+
+      // Move ghost toward target (avoid reversing unless necessary)
+      const directions = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}];
+      const reverseDir = {x: -ghost.dir.x, y: -ghost.dir.y};
+      let bestDir = ghost.dir;
+      let bestDist = Infinity;
+      let foundMove = false;
+
+      // Try all directions except reverse first
+      for (const dir of directions) {
+        if (dir.x === reverseDir.x && dir.y === reverseDir.y) continue;
+
+        const testPos = {x: ghost.x + dir.x, y: ghost.y + dir.y};
+        if (testPos.x >= 0 && testPos.x < gridWidth &&
+            testPos.y >= 0 && testPos.y < gridHeight &&
+            this.pacmanMaze[testPos.y][testPos.x] !== 1) {
+          const dist = Math.abs(testPos.x - targetX) + Math.abs(testPos.y - targetY);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestDir = dir;
+            foundMove = true;
+          }
+        }
+      }
+
+      // If no valid move found, allow reverse direction
+      if (!foundMove) {
+        const testPos = {x: ghost.x + reverseDir.x, y: ghost.y + reverseDir.y};
+        if (testPos.x >= 0 && testPos.x < gridWidth &&
+            testPos.y >= 0 && testPos.y < gridHeight &&
+            this.pacmanMaze[testPos.y][testPos.x] !== 1) {
+          bestDir = reverseDir;
+          foundMove = true;
+        }
+      }
+
+      if (foundMove) {
+        ghost.dir = bestDir;
+        ghost.x += ghost.dir.x;
+        ghost.y += ghost.dir.y;
+      }
+
+      // Wrap around edges (tunnel effect)
+      if (ghost.x < 0) ghost.x = gridWidth - 1;
+      if (ghost.x >= gridWidth) ghost.x = 0;
+    });
+  }
+
+  private renderPacmanMaze(cellSize: number): void {
+    for (let y = 0; y < this.pacmanMaze.length; y++) {
+      for (let x = 0; x < this.pacmanMaze[0].length; x++) {
+        const cell = this.pacmanMaze[y][x];
+        const px = x * cellSize;
+        const py = y * cellSize;
+
+        if (cell === 1) {
+          // Wall - blue
+          for (let dy = 0; dy < cellSize; dy++) {
+            for (let dx = 0; dx < cellSize; dx++) {
+              this.matrix.fgColor(0x2121FF).setPixel(px + dx, py + dy);
+            }
+          }
+        } else if (cell === 2) {
+          // Dot - white pixel in center
+          this.matrix.fgColor(0xFFFFFF).setPixel(px + Math.floor(cellSize/2), py + Math.floor(cellSize/2));
+        } else if (cell === 3) {
+          // Power pellet - larger white circle
+          for (let dy = 1; dy < cellSize - 1; dy++) {
+            for (let dx = 1; dx < cellSize - 1; dx++) {
+              this.matrix.fgColor(0xFFFFFF).setPixel(px + dx, py + dy);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private renderPacmanCharacter(cellSize: number): void {
+    const px = this.pacmanPos.x * cellSize;
+    const py = this.pacmanPos.y * cellSize;
+
+    // Draw Pac-Man as yellow circle (4x4)
+    const color = 0xFFFF00; // Yellow
+    for (let dy = 0; dy < cellSize; dy++) {
+      for (let dx = 0; dx < cellSize; dx++) {
+        // Simple circle
+        const centerDist = Math.sqrt((dx - cellSize/2) ** 2 + (dy - cellSize/2) ** 2);
+        if (centerDist < cellSize/2) {
+          this.matrix.fgColor(color).setPixel(px + dx, py + dy);
+        }
+      }
+    }
+  }
+
+  private renderPacmanGhosts(cellSize: number): void {
+    this.ghosts.forEach(ghost => {
+      const px = ghost.x * cellSize;
+      const py = ghost.y * cellSize;
+
+      // Ghost color
+      let color = ghost.mode === 'frightened' ? 0x2121FF : ghost.color;
+
+      // Draw ghost as colored circle/square
+      for (let dy = 0; dy < cellSize; dy++) {
+        for (let dx = 0; dx < cellSize; dx++) {
+          const centerDist = Math.sqrt((dx - cellSize/2) ** 2 + (dy - cellSize/2) ** 2);
+          if (centerDist < cellSize/2) {
+            this.matrix.fgColor(color).setPixel(px + dx, py + dy);
+          }
+        }
+      }
+    });
   }
 
   // Public API

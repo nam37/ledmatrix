@@ -199,6 +199,69 @@ export const spectrumModeSettings = (state: DisplayState) => html`
   <div id="mode-settings-message" class="uk-margin-small-top"></div>
 `;
 
+// Fire mode settings
+export const fireModeSettings = (state: DisplayState) => html`
+  <h3 class="uk-card-title">Fire Settings</h3>
+  <form hx-post="/api/mode-options/fire" hx-target="#mode-settings-message" hx-swap="innerHTML" class="uk-form-stacked">
+    <div class="uk-margin">
+      <label class="uk-form-label">Color Scheme</label>
+      <select name="fireColorScheme" class="uk-select">
+        <option value="traditional" ${state.fireColorScheme === 'traditional' ? 'selected' : ''}>Traditional (Orange/Red)</option>
+        <option value="blue" ${state.fireColorScheme === 'blue' ? 'selected' : ''}>Blue Flame</option>
+        <option value="green" ${state.fireColorScheme === 'green' ? 'selected' : ''}>Green Flame</option>
+        <option value="purple" ${state.fireColorScheme === 'purple' ? 'selected' : ''}>Purple Flame</option>
+      </select>
+    </div>
+    <div class="uk-margin">
+      <label class="uk-form-label">Intensity</label>
+      <select name="fireIntensity" class="uk-select">
+        <option value="calm" ${state.fireIntensity === 'calm' ? 'selected' : ''}>Calm</option>
+        <option value="normal" ${state.fireIntensity === 'normal' ? 'selected' : ''}>Normal</option>
+        <option value="intense" ${state.fireIntensity === 'intense' ? 'selected' : ''}>Intense</option>
+      </select>
+    </div>
+    <div class="uk-margin">
+      <label class="uk-form-label">Speed</label>
+      <select name="fireSpeed" class="uk-select">
+        <option value="slow" ${state.fireSpeed === 'slow' ? 'selected' : ''}>Slow</option>
+        <option value="normal" ${state.fireSpeed === 'normal' ? 'selected' : ''}>Normal</option>
+        <option value="fast" ${state.fireSpeed === 'fast' ? 'selected' : ''}>Fast</option>
+      </select>
+    </div>
+    <button type="submit" class="uk-button uk-button-primary uk-width-1-1">
+      <span uk-icon="icon: check"></span> Apply Settings
+    </button>
+  </form>
+  <div id="mode-settings-message" class="uk-margin-small-top"></div>
+`;
+
+// Pac-Man mode settings
+export const pacmanModeSettings = (state: DisplayState) => html`
+  <h3 class="uk-card-title">Pac-Man Settings</h3>
+  <form hx-post="/api/mode-options/pacman" hx-target="#mode-settings-message" hx-swap="innerHTML" class="uk-form-stacked">
+    <div class="uk-margin">
+      <label class="uk-form-label">Game Speed</label>
+      <select name="pacmanSpeed" class="uk-select">
+        <option value="slow" ${state.pacmanSpeed === 'slow' ? 'selected' : ''}>Slow</option>
+        <option value="normal" ${state.pacmanSpeed === 'normal' ? 'selected' : ''}>Normal</option>
+        <option value="fast" ${state.pacmanSpeed === 'fast' ? 'selected' : ''}>Fast</option>
+      </select>
+    </div>
+    <div class="uk-margin">
+      <label class="uk-form-label">Ghost Difficulty</label>
+      <select name="pacmanDifficulty" class="uk-select">
+        <option value="easy" ${state.pacmanDifficulty === 'easy' ? 'selected' : ''}>Easy</option>
+        <option value="normal" ${state.pacmanDifficulty === 'normal' ? 'selected' : ''}>Normal</option>
+        <option value="hard" ${state.pacmanDifficulty === 'hard' ? 'selected' : ''}>Hard</option>
+      </select>
+    </div>
+    <button type="submit" class="uk-button uk-button-primary uk-width-1-1">
+      <span uk-icon="icon: check"></span> Apply Settings
+    </button>
+  </form>
+  <div id="mode-settings-message" class="uk-margin-small-top"></div>
+`;
+
 // Empty settings for modes with no config
 export const emptyModeSettings = (modeName: string) => html`
   <h3 class="uk-card-title">${modeName} Mode</h3>
@@ -235,6 +298,10 @@ export const getModeSettings = (state: DisplayState, imageInfos?: ImageInfo[], c
       return mazeModeSettings(state);
     case 'spectrum':
       return spectrumModeSettings(state);
+    case 'fire':
+      return fireModeSettings(state);
+    case 'pacman':
+      return pacmanModeSettings(state);
     case 'off':
       return emptyModeSettings('Off');
     default:

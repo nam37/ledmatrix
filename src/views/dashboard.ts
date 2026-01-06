@@ -127,6 +127,26 @@ export const modeButtons = (currentMode: string) => html`
   <div>
     <button
       hx-post="/api/mode"
+      hx-vals='{"mode": "fire"}'
+      hx-target="#mode-buttons"
+      hx-swap="innerHTML"
+      class="uk-button uk-button-default uk-width-1-1 ${currentMode === 'fire' ? 'uk-button-primary' : ''}">
+      <span uk-icon="icon: bolt"></span> Fire
+    </button>
+  </div>
+  <div>
+    <button
+      hx-post="/api/mode"
+      hx-vals='{"mode": "pacman"}'
+      hx-target="#mode-buttons"
+      hx-swap="innerHTML"
+      class="uk-button uk-button-default uk-width-1-1 ${currentMode === 'pacman' ? 'uk-button-primary' : ''}">
+      <span uk-icon="icon: play-circle"></span> Pac-Man
+    </button>
+  </div>
+  <div>
+    <button
+      hx-post="/api/mode"
       hx-vals='{"mode": "off"}'
       hx-target="#mode-buttons"
       hx-swap="innerHTML"

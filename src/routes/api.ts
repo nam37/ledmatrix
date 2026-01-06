@@ -39,7 +39,7 @@ export function createApiRoutes(matrixController: MatrixController) {
     const formData = await c.req.parseBody();
     const mode = formData.mode as DisplayMode;
 
-    if (['clock', 'text', 'weather', 'scroll', 'rainbow', 'plasma', 'squares', 'life', 'pulse', 'image', 'maze', 'spectrum', 'off'].includes(mode)) {
+    if (['clock', 'text', 'weather', 'scroll', 'rainbow', 'plasma', 'squares', 'life', 'pulse', 'image', 'maze', 'spectrum', 'fire', 'pacman', 'off'].includes(mode)) {
       matrixController.setMode(mode);
       const state = matrixController.getState();
 
@@ -168,6 +168,37 @@ export function createApiRoutes(matrixController: MatrixController) {
     return c.html(html`
       <div class="uk-alert-success" uk-alert>
         <p><span uk-icon="icon: check"></span> Spectrum settings updated</p>
+      </div>
+    `);
+  });
+
+  // Mode options - Fire
+  api.post('/mode-options/fire', async (c) => {
+    const formData = await c.req.parseBody();
+    const fireColorScheme = formData.fireColorScheme as 'traditional' | 'blue' | 'green' | 'purple';
+    const fireIntensity = formData.fireIntensity as 'calm' | 'normal' | 'intense';
+    const fireSpeed = formData.fireSpeed as 'slow' | 'normal' | 'fast';
+
+    matrixController.setModeOptions({ fireColorScheme, fireIntensity, fireSpeed });
+
+    return c.html(html`
+      <div class="uk-alert-success" uk-alert>
+        <p><span uk-icon="icon: check"></span> Fire settings updated</p>
+      </div>
+    `);
+  });
+
+  // Mode options - Pac-Man
+  api.post('/mode-options/pacman', async (c) => {
+    const formData = await c.req.parseBody();
+    const pacmanSpeed = formData.pacmanSpeed as 'slow' | 'normal' | 'fast';
+    const pacmanDifficulty = formData.pacmanDifficulty as 'easy' | 'normal' | 'hard';
+
+    matrixController.setModeOptions({ pacmanSpeed, pacmanDifficulty });
+
+    return c.html(html`
+      <div class="uk-alert-success" uk-alert>
+        <p><span uk-icon="icon: check"></span> Pac-Man settings updated</p>
       </div>
     `);
   });
